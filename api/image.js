@@ -9,26 +9,36 @@ module.exports = async (req, res) => {
   try {
     const { prompt } = req.body;
     
-    // Формируем запрос на английском для лучшего понимания моделью, добавляем фитнес-контекст
+    // Передаем точный запрос ИИ, требуя высокое качество
     const encodedPrompt = encodeURIComponent(prompt + ', highly detailed, 4k, no text');
-    
-    // Стучимся в бесплатный синхронный API
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=800&nologo=true`;
+    const randomSeed = Math.floor(Math.random() * 100000);
+    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=800&nologo=true&seed=${randomSeed}`;
 
-    // Скачиваем картинку напрямую на сервере Vercel
-    const imageResponse = await fetch(imageUrl);
-    
-    if (!imageResponse.ok) {
-        return res.status(200).json({ error: 'Не удалось сгенерировать изображение.' });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000); 
+
+    try {
+      const imageResponse = await fetch(imageUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (!imageResponse.ok) throw new Error('Pollinations overload');
+
+      const arrayBuffer = await imageResponse.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const base64 = buffer.toString('base64');
+      
+      return res.status(200).json({ image: 'data:image/jpeg;base64,' + base64 });
+
+    } catch (fetchError) {
+      // Запасные картинки на случай долгого ответа нейросети
+      const fallbackImages = [
+        'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=800',
+        'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=800',
+        'https://images.unsplash.com/photo-1541534741688-6078c6bfb5c5?q=80&w=800'
+      ];
+      const randomImage = fallbackImages[Math.floor(Math.random() * fallbackImages.length)];
+      return res.status(200).json({ image: randomImage });
     }
-
-    // Переводим картинку в буфер, а затем в формат base64
-    const arrayBuffer = await imageResponse.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const base64 = buffer.toString('base64');
-    
-    // Отдаем твоему приложению точно в таком же виде, как оно привыкло получать
-    return res.status(200).json({ image: 'data:image/jpeg;base64,' + base64 });
     
   } catch (e) {
     return res.status(500).json({ error: String(e) });
