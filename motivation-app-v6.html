@@ -188,7 +188,7 @@ const I18N={
   welcomeBack:'欢迎回来，', morning:'早上好',day:'下午好',evening:'晚上好',night:'晚安',
   points:'积分 ✨', spendHint:'在「活动」和「设置」中使用积分。', now:'现在',
   s_tasks:'任务',s_challenges:'挑战',s_sleep:'睡眠28天',done_pct:'% 已完成',done_word:'已完成',days_passed:'天已完成',
-  taskProgress:'任务进度', yourCoach:'你的教练', openChat:'打开聊天',
+  taskProgress:'任务进度',你的教练:'你的教练', openChat:'打开聊天',
   daysRow:'天连续', lvl:'等级', xp:'经验', freshTitle:'✨ 新篇章！',
   freshMsg:'今天是重新开始的好日子。在下方设定你的意图吧。',
   dailyRitual:'每日仪式', openChest:'🎁 打开每日宝箱', chestDone:'🎁 今天的宝箱已打开——明天再来！',
@@ -702,6 +702,9 @@ async function sendChat(){
   const ans=await callGemini(buildSystem(COACHES[coachAtSend]),mainContents());
   state.chat.push({role:'coach',coach:coachAtSend,text:ans.reply});
   if(Array.isArray(ans.newTasks))ans.newTasks.slice(0,3).forEach(x=>state.tasks.push({id:uid(),sphere:x.sphere||weakestSphere(),name:x.name||'Task',desc:x.desc||'',benefit:x.benefit||'',byCoach:true}));
+  
+  if(ans.imagePrompt) { generateImage(ans.imagePrompt, '', coachAtSend); }
+  
   save();if(state.view==='chat')renderChat();renderNav();
  }catch(e){state.chat.push({role:'coach',coach:coachAtSend,text:t('aiError')});save();if(state.view==='chat')renderChat();}
  finally{aiPending=false;$('typing')?.classList.add('hidden');}
@@ -746,8 +749,13 @@ function buildSystem(c){
 - Если пользователь просит задачи/мотивацию/план — добавь 1–3 НОВЫХ конкретных задания.
 - Сферы (поле sphere) пиши ВСЕГДА по-русски одним из: Здоровье, Спорт, Фокус, Общение, Обучение, Мотивация (название самой задачи — на языке пользователя).
 - Верни ЧИСТЫЙ JSON без markdown:
-{"reply":"текст пользователю","newTasks":[{"sphere":"...","name":"...","desc":"...","benefit":"..."}]}
-- Не нужны задачи — "newTasks": [].`;
+{"reply":"текст пользователю","newTasks":[{"sphere":"...","name":"...","desc":"...","benefit":"..."}], "imagePrompt": null}
+- Не нужны задачи — "newTasks": [].
+
+ПРАВИЛО ГЕНЕРАЦИИ КАРТИНОК:
+По умолчанию "imagePrompt" = null. Заполняй его описанием на АНГЛИЙСКОМ языке ТОЛЬКО если:
+1. Пользователь прямо попросил показать предмет (например, "покажи кресло" -> "a realistic cozy armchair").
+2. Пользователь сообщил, что выполнил 3 или более задач (напиши промпт для награды: "golden champion cup glowing").`;
 }
 /* контекст: последние 16 реплик единого чата с пометкой тренера */
 function mainContents(){
@@ -763,7 +771,11 @@ async function callProxy(systemText,contents,wantJson){
  const res=await fetch(state.proxyUrl.replace(/\/$/,'')+'/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system:systemText,contents,wantJson})});
  if(!res.ok)throw new Error('proxy HTTP '+res.status);
  const d=await res.json();
- return{reply:typeof d.reply==='string'?d.reply:JSON.stringify(d),newTasks:Array.isArray(d.newTasks)?d.newTasks:[]};
+ return{
+  reply:typeof d.reply==='string'?d.reply:JSON.stringify(d),
+  newTasks:Array.isArray(d.newTasks)?d.newTasks:[],
+  imagePrompt: d.imagePrompt || null
+ };
 }
 async function callGeminiDirect(systemText,contents,wantJson=true){
  const body={system_instruction:{parts:[{text:systemText}]},contents,generationConfig:{temperature:0.9}};
@@ -917,164 +929,163 @@ async function finishIQ(){
  grantReward('iq');
  let silasText=`${correct}/${total} · ~${est} · +${reward} ✨`;
  if(state.apiKey||state.proxyUrl){
-  try{const sys=buildSystem(COACHES.silas)+`\nСЕЙЧАС: пользователь прошёл IQ-игру (${correct}/${total}, индекс ~${est}). Дай короткое мудрое напутствие (3-4 предложения) в своём стиле, без новых задач. ОТВЕЧАЙ НА ЯЗЫКЕ: ${aiLang()}. Обычный текст.`;
-   const ans=await callGemini(sys,[{role:'user',parts:[{text:'finished'}]}],false);silasText=ans.reply+`\n\n${correct}/${total} · ~${est} · +${reward} ✨`;}catch(e){}
- }
- state.chat.push({role:'coach',coach:'silas',text:'🧠\n\n'+silasText});
- iq=null;state.view='chat';save();render();
+ -4 предложения) в своём стиле, без новых задач. ОТВЕЧАЙ НА ЯЗЫКЕ: ${aiLang()}. Обычный текст.`;
+   const ans=await callGemini(sys,[{role:'user',parts:[{text:'finished'}]}],false);silasText=ans.reply+`\n\n${correct}/${total} · ~${est} · +${reward} ✨`;}catch(e){}
+ }
+ state.chat.push({role:'coach',coach:'silas',text:'🧠\n\n'+silasText});
+ iq=null;state.view='chat';save();render();
 }
 
 /* ---------- СОБЕСЕДОВАНИЕ В БАНК ---------- */
 function startInterview(){
- if(!state.apiKey&&!state.proxyUrl){modal(t('aiCoach'),t('aiOff'));return;}
- if(state.points<COST_INTERVIEW){modal(t('notEnough'),t('need')+' '+COST_INTERVIEW+' ✨');return;}
- addPoints(-COST_INTERVIEW);save();
- act={type:'interview',emoji:'🏦',transcript:[],qIndex:0};
- act.sys=`Ты — HR-интервьюер крупного банка (стажировка/начальная позиция). Проводишь ПРОБНОЕ собеседование как тренажёр. Задавай вопросы ПО ОДНОМУ, всего около 6: смесь на (1) логику/нестандартное мышление, (2) мотивацию и ценности, (3) компетенции и опыт. Реагируй коротко и профессионально, затем задавай следующий вопрос. Не выставляй оценку до конца. ОТВЕЧАЙ НА ЯЗЫКЕ: ${aiLang()}. Вежливо, по-деловому. Обычный текст. Сейчас: ${timeContext()}.`;
- const hi={ru:`Здравствуйте, ${state.profile.name||''}! Спасибо, что пришли. Расскажите коротко о себе и почему вас заинтересовала позиция в нашем банке?`,en:`Hello, ${state.profile.name||''}! Thanks for coming. Tell me briefly about yourself and why this position at our bank interests you.`,zh:`你好，${state.profile.name||''}！感谢你前来。请简单介绍一下你自己，以及为什么对我们银行的这个职位感兴趣？`}[state.lang||'ru'];
- act.transcript.push({role:'model',text:hi});
- save();
- actBox('🏦 '+t('act_int_t'),'','','...',`<button class="btn btn-mint px-4 py-2 text-sm" onclick="finishInterview()">✓</button>`);
+ if(!state.apiKey&&!state.proxyUrl){modal(t('aiCoach'),t('aiOff'));return;}
+ if(state.points<COST_INTERVIEW){modal(t('notEnough'),t('need')+' '+COST_INTERVIEW+' ✨');return;}
+ addPoints(-COST_INTERVIEW);save();
+ act={type:'interview',emoji:'🏦',transcript:[],qIndex:0};
+ act.sys=`Ты — HR-интервьюер крупного банка (стажировка/начальная позиция). Проводишь ПРОБНОЕ собеседование как тренажёр. Задавай вопросы ПО ОДНОМУ, всего около 6: смесь на (1) логику/нестандартное мышление, (2) мотивацию и ценности, (3) компетенции и опыт. Реагируй коротко и профессионально, затем задавай следующий вопрос. Не выставляй оценку до конца. ОТВЕЧАЙ НА ЯЗЫКЕ: ${aiLang()}. Вежливо, по-деловому. Обычный текст. Сейчас: ${timeContext()}.`;
+ const hi={ru:`Здравствуйте, ${state.profile.name||''}! Спасибо, что пришли. Расскажите коротко о себе и почему вас заинтересовала позиция в нашем банке?`,en:`Hello, ${state.profile.name||''}! Thanks for coming. Tell me briefly about yourself and why this position at our bank interests you.`,zh:`你好，${state.profile.name||''}！感谢你前来。请简单介绍一下你自己，以及为什么对我们银行的这个职位感兴趣？`}[state.lang||'ru'];
+ act.transcript.push({role:'model',text:hi});
+ save();
+ actBox('🏦 '+t('act_int_t'),'','','...',`<button class="btn btn-mint px-4 py-2 text-sm" onclick="finishInterview()">✓</button>`);
 }
 async function finishInterview(){
- if(!act||act.type!=='interview')return;
- $('actTyping')?.classList.remove('hidden');
- try{
-  const convo=act.transcript.map(m=>(m.role==='user'?'Candidate: ':'Interviewer: ')+m.text).join('\n');
-  const sys=`Ты — старший HR крупного банка. Собеседование завершено. Дай профессиональный ОТЧЁТ по кандидату. Оцени по шкале 1-10 три блока: Логика, Мотивация, Компетенции — и общий балл. Для каждого — короткий комментарий. В конце 2-3 совета. По-деловому, доброжелательно. ОТВЕЧАЙ НА ЯЗЫКЕ: ${aiLang()}. Обычный текст.`;
-  const ans=await callGemini(sys,[{role:'user',parts:[{text:convo}]}],false);
-  state.interviewsCount++;
-  remember(`Прошёл пробное собеседование. Итог: ${ans.reply.slice(0,180)}`);
-  state.chat.push({role:'coach',coach:'johnny',text:'🏦\n\n'+ans.reply});
-  grantReward('interview');
-  act=null;state.view='chat';save();render();
- }catch(e){$('actTyping')?.classList.add('hidden');modal('⚠',e.message);}
+ if(!act||act.type!=='interview')return;
+ $('actTyping')?.classList.remove('hidden');
+ try{
+  const convo=act.transcript.map(m=>(m.role==='user'?'Candidate: ':'Interviewer: ')+m.text).join('\n');
+  const sys=`Ты — старший HR крупного банка. Собеседование завершено. Дай профессиональный ОТЧЁТ по кандидату. Оцени по шкале 1-10 три блока: Логика, Мотивация, Компетенции — и общий балл. Для каждого — короткий комментарий. В конце 2-3 совета. По-деловому, доброжелательно. ОТВЕЧАЙ НА ЯЗЫКЕ: ${aiLang()}. Обычный текст.`;
+  const ans=await callGemini(sys,[{role:'user',parts:[{text:convo}]}],false);
+  state.interviewsCount++;
+  remember(`Прошёл пробное собеседование. Итог: ${ans.reply.slice(0,180)}`);
+  state.chat.push({role:'coach',coach:'johnny',text:'🏦\n\n'+ans.reply});
+  grantReward('interview');
+  act=null;state.view='chat';save();render();
+ }catch(e){$('actTyping')?.classList.add('hidden');modal('⚠',e.message);}
 }
 
 /* ---------- ТРЕНИРОВКА СО СКАЛОЙ ---------- */
 let workout=null;
 function startWorkout(){
- if(state.points<COST_WORKOUT){modal(t('notEnough'),t('need')+' '+COST_WORKOUT+' ✨');return;}
- addPoints(-COST_WORKOUT);save();
- workout={i:0};
- renderWorkout();
+ if(state.points<COST_WORKOUT){modal(t('notEnough'),t('need')+' '+COST_WORKOUT+' ✨');return;}
+ addPoints(-COST_WORKOUT);save();
+ workout={i:0};
+ renderWorkout();
 }
 function renderWorkout(){
- if(!workout)return;
- const total=WORKOUT.length;
- if(workout.i>=total){finishWorkout();return;}
- const ex=WORKOUT[workout.i];
- const intro=workout.i===0?`<div class="text-sm opacity-90 mb-2">WHOA! Let's GO! No days off! 💥</div>`:'';
- $('app').innerHTML=`<div class="fade" style="max-width:620px;margin:0 auto">
-  <div class="card p-4 mb-3" style="background:linear-gradient(135deg,#b45309,#f59e0b);color:#fff;border:none">
-   <div class="font-extrabold">🪨 ${t('act_wk_t')}</div>
-   <div class="text-sm opacity-90">${workout.i+1} / ${total}</div>
-  </div>
-  <div class="card p-6">
-   ${intro}
-   <div class="font-extrabold text-xl mb-1">${esc(t('ex_'+workout.i+'_n'))}</div>
-   <div class="pill btn-coral inline-block mb-3">${esc(t('ex_'+workout.i+'_r'))}</div>
-   <img src="${ex.img}" alt="" style="width:100%;max-height:280px;object-fit:cover;border-radius:14px;background:#f1f1f1" onerror="this.style.display='none'">
-   <div class="text-sm mt-3" style="color:var(--muted)">📋 ${esc(t('ex_'+workout.i+'_h'))}</div>
-   <div class="flex gap-2 mt-5">
-     <button class="btn btn-ghost flex-1 py-3" onclick="workoutSkip()">${t('skip')}</button>
-     <button class="btn btn-coral flex-1 py-3" onclick="workoutNext()">${t('didIt')}</button>
-   </div>
-  </div></div>`;
+ if(!workout)return;
+ const total=WORKOUT.length;
+ if(workout.i>=total){finishWorkout();return;}
+ const ex=WORKOUT[workout.i];
+ const intro=workout.i===0?`<div class="text-sm opacity-90 mb-2">WHOA! Let's GO! No days off! 💥</div>`:'';
+ $('app').innerHTML=`<div class="fade" style="max-width:620px;margin:0 auto">
+  <div class="card p-4 mb-3" style="background:linear-gradient(135deg,#b45309,#f59e0b);color:#fff;border:none">
+   <div class="font-extrabold">🪨 ${t('act_wk_t')}</div>
+   <div class="text-sm opacity-90">${workout.i+1} / ${total}</div>
+  </div>
+  <div class="card p-6">
+   ${intro}
+   <div class="font-extrabold text-xl mb-1">${esc(t('ex_'+workout.i+'_n'))}</div>
+   <div class="pill btn-coral inline-block mb-3">${esc(t('ex_'+workout.i+'_r'))}</div>
+   <img src="${ex.img}" alt="" style="width:100%;max-height:280px;object-fit:cover;border-radius:14px;background:#f1f1f1" onerror="this.style.display='none'">
+   <div class="text-sm mt-3" style="color:var(--muted)">📋 ${esc(t('ex_'+workout.i+'_h'))}</div>
+   <div class="flex gap-2 mt-5">
+     <button class="btn btn-ghost flex-1 py-3" onclick="workoutSkip()">${t('skip')}</button>
+     <button class="btn btn-coral flex-1 py-3" onclick="workoutNext()">${t('didIt')}</button>
+   </div>
+  </div></div>`;
 }
 function workoutNext(){workout.i++;renderWorkout();}
 function workoutSkip(){workout.i++;renderWorkout();}
 async function finishWorkout(){
- const gain=25;addPoints(gain);
- remember('Прошёл домашнюю тренировку со Скалой.');
- grantReward('workout');
- let text='🪨 You did it! No days off! +'+gain+' ✨';
- if(state.apiKey||state.proxyUrl){
-  try{const sys=buildSystem(COACHES.rock)+`\nСЕЙЧАС: пользователь завершил домашнюю тренировку. Напиши мощное короткое поздравление в своём стиле (3-4 предложения), без новых задач. ОТВЕЧАЙ НА ЯЗЫКЕ: ${aiLang()}. Обычный текст.`;
-   const ans=await callGemini(sys,[{role:'user',parts:[{text:'done'}]}],false);text=ans.reply+`\n\n+${gain} ✨`;}catch(e){}
- }
- state.chat.push({role:'coach',coach:'rock',text:'💪\n\n'+text});
- workout=null;state.view='chat';save();render();
- coachImageMoment('workout');
+ const gain=25;addPoints(gain);
+ remember('Прошёл домашнюю тренировку со Скалой.');
+ grantReward('workout');
+ let text='🪨 You did it! No days off! +'+gain+' ✨';
+ if(state.apiKey||state.proxyUrl){
+  try{const sys=buildSystem(COACHES.rock)+`\nСЕЙЧАС: пользователь завершил домашнюю тренировку. Напиши мощное короткое поздравление в своём стиле (3-4 предложения), без новых задач. ОТВЕЧАЙ НА ЯЗЫКЕ: ${aiLang()}. Обычный текст.`;
+   const ans=await callGemini(sys,[{role:'user',parts:[{text:'done'}]}],false);text=ans.reply+`\n\n+${gain} ✨`;}catch(e){}
+ }
+ state.chat.push({role:'coach',coach:'rock',text:'💪\n\n'+text});
+ workout=null;state.view='chat';save();render();
+ coachImageMoment('workout');
 }
 
 /* ---------- НОВЫЕ АКТИВНОСТИ: благодарность и визуализация ---------- */
 function startGratitude(){
- if(!state.apiKey&&!state.proxyUrl){modal(t('aiCoach'),t('aiOff'));return;}
- if(state.points<COST_IQ){modal(t('notEnough'),t('need')+' '+COST_IQ+' ✨');return;}
- addPoints(-COST_IQ);save();
- act={type:'gratitude',emoji:'💝',transcript:[],
-  finishLabel:'✓',finishFn:'finishSession()'};
- act.sys=`Ты — Аврора, ведёшь тёплый вечер благодарности. Мягко помогай пользователю вспомнить 3 хорошие вещи за день и заметить свой прогресс. Задавай по одному доброму вопросу, искренне реагируй, поддерживай. ОТВЕЧАЙ НА ЯЗЫКЕ: ${aiLang()}. Веди по одной реплике. Обычный текст.`;
- const hi={ru:'Привет 💝 Давай немного выдохнем. Расскажи: что хорошего случилось у тебя сегодня — пусть даже маленькое?',en:"Hi 💝 Let's take a breath. Tell me: what good happened to you today — even something small?",zh:'嗨 💝 我们歇口气吧。跟我说说：今天有什么好事发生——哪怕是小事？'}[state.lang||'ru'];
- act.transcript.push({role:'model',text:hi});save();
- actBox('💝 '+t('act_grat_t'),'','date-bg','...',`<button class="btn btn-rose px-4 py-2 text-sm" onclick="finishSession()">✓</button>`);
+ if(!state.apiKey&&!state.proxyUrl){modal(t('aiCoach'),t('aiOff'));return;}
+ if(state.points<COST_IQ){modal(t('notEnough'),t('need')+' '+COST_IQ+' ✨');return;}
+ addPoints(-COST_IQ);save();
+ act={type:'gratitude',emoji:'💝',transcript:[],finishLabel:'✓',finishFn:'finishSession()'};
+ act.sys=`Ты — Аврора, ведёшь тёплый вечер благодарности. Мягко помогай пользователю вспомнить 3 хорошие вещи за день и заметить свой прогресс. Задавай по одному доброму вопросу, искренне реагируй, поддерживай. ОТВЕЧАЙ НА ЯЗЫКЕ: ${aiLang()}. Веди по одной реплике. Обычный текст.`;
+ const hi={ru:'Привет 💝 Давай немного выдохнем. Расскажи: что хорошего случилось у тебя сегодня — пусть даже маленькое?',en:"Hi 💝 Let's take a breath. Tell me: what good happened to you today — even something small?",zh:'嗨 💝 我们歇口气吧。跟我说说：今天有什么好事发生——哪怕是小事？'}[state.lang||'ru'];
+ act.transcript.push({role:'model',text:hi});save();
+ actBox('💝 '+t('act_grat_t'),'','date-bg','...',`<button class="btn btn-rose px-4 py-2 text-sm" onclick="finishSession()">✓</button>`);
 }
 function startVisualize(){
- if(!state.apiKey&&!state.proxyUrl){modal(t('aiCoach'),t('aiOff'));return;}
- if(state.points<COST_IQ){modal(t('notEnough'),t('need')+' '+COST_IQ+' ✨');return;}
- addPoints(-COST_IQ);save();
- act={type:'visualize',emoji:'🌅',transcript:[]};
- act.sys=`Ты — Сайлас, мудрый наставник. Проводишь управляемую визуализацию цели. Спокойно, образно веди пользователя: пусть ярко представит свою цель достигнутой — что видит, чувствует, какой он. Задавай по одному вопросу, углубляй образ метафорами. ОТВЕЧАЙ НА ЯЗЫКЕ: ${aiLang()}. По одной реплике. Обычный текст.`;
- const hi={ru:'Закрой на миг глаза… 🌅 Представь, что прошёл год и твоя главная цель достигнута. Где ты находишься? Опиши, что видишь вокруг.',en:'Close your eyes for a moment… 🌅 Imagine a year has passed and your main goal is achieved. Where are you? Describe what you see around you.',zh:'闭上眼睛片刻……🌅 想象一年过去了，你的主要目标已经实现。你身在何处？描述一下你看到的一切。'}[state.lang||'ru'];
- act.transcript.push({role:'model',text:hi});save();
- actBox('🌅 '+t('act_vis_t'),'','','...',`<button class="btn btn-primary px-4 py-2 text-sm" onclick="finishSession()">✓</button>`);
+ if(!state.apiKey&&!state.proxyUrl){modal(t('aiCoach'),t('aiOff'));return;}
+ if(state.points<COST_IQ){modal(t('notEnough'),t('need')+' '+COST_IQ+' ✨');return;}
+ addPoints(-COST_IQ);save();
+ act={type:'visualize',emoji:'🌅',transcript:[]};
+ act.sys=`Ты — Сайлас, мудрый наставник. Проводишь управляемую визуализацию цели. Спокойно, образно веди пользователя: пусть ярко представит свою цель достигнутой — что видит, чувствует, какой он. Задавай по одному вопросу, углубляй образ метафорами. ОТВЕЧАЙ НА ЯЗЫКЕ: ${aiLang()}. По одной реплике. Обычный текст.`;
+ const hi={ru:'Закрой на миг глаза… 🌅 Представь, что прошёл год и твоя главная цель достигнута. Где ты находишься? Опиши, что видишь вокруг.',en:'Close your eyes for a moment… 🌅 Imagine a year has passed and your main goal is achieved. Where are you? Describe what you see around you.',zh:'闭上眼睛片刻……🌅 想象一年过去了，你的主要目标已经实现。你身在何处？描述一下你看到的一切。'}[state.lang||'ru'];
+ act.transcript.push({role:'model',text:hi});save();
+ actBox('🌅 '+t('act_vis_t'),'','','...',`<button class="btn btn-primary px-4 py-2 text-sm" onclick="finishSession()">✓</button>`);
 }
-/* Завершение лёгкой сессии (благодарность/визуализация): сохраняем тёплый итог в чат */
+/* Завершение лёгкой сессии (благодарность/визуализация) */
 async function finishSession(){
- if(!act)return;
- $('actTyping')?.classList.remove('hidden');
- const coach=act.type==='gratitude'?'aurora':'silas';
- try{
-  const convo=act.transcript.map(m=>(m.role==='user'?'User: ':'Coach: ')+m.text).join('\n');
-  const sys=`${buildSystem(COACHES[coach])}\nСЕЙЧАС: сессия (${act.type}) завершена. Напиши тёплое короткое завершение и одну мысль на память (3-4 предложения), без новых задач. ОТВЕЧАЙ НА ЯЗЫКЕ: ${aiLang()}. Обычный текст.`;
-  const ans=await callGemini(sys,[{role:'user',parts:[{text:convo}]}],false);
-  state.chat.push({role:'coach',coach,text:(act.type==='gratitude'?'💝\n\n':'🌅\n\n')+ans.reply});
-  act=null;state.view='chat';save();render();
- }catch(e){$('actTyping')?.classList.add('hidden');modal('⚠',e.message);}
+ if(!act)return;
+ $('actTyping')?.classList.remove('hidden');
+ const coach=act.type==='gratitude'?'aurora':'silas';
+ try{
+  const convo=act.transcript.map(m=>(m.role==='user'?'User: ':'Coach: ')+m.text).join('\n');
+  const sys=`${buildSystem(COACHES[coach])}\nСЕЙЧАС: сессия (${act.type}) завершена. Напиши тёплое короткое завершение и одну мысль на память (3-4 предложения), без новых задач. ОТВЕЧАЙ НА ЯЗЫКЕ: ${aiLang()}. Обычный текст.`;
+  const ans=await callGemini(sys,[{role:'user',parts:[{text:convo}]}],false);
+  state.chat.push({role:'coach',coach,text:(act.type==='gratitude'?'💝\n\n':'🌅\n\n')+ans.reply});
+  act=null;state.view='chat';save();render();
+ }catch(e){$('actTyping')?.classList.add('hidden');modal('⚠',e.message);}
 }
 
 /* ---------- общий обработчик ввода фокус-сессий ---------- */
 async function actSend(){
- if(!act||chatBusy)return;const input=$('actInput');if(!input)return;const text=input.value.trim();if(!text)return;
- act.transcript.push({role:'user',text});input.value='';
- const titles={date:['💖 '+t('act_date_t'),'date-bg','finishDate()','btn-rose'],interview:['🏦 '+t('act_int_t'),'','finishInterview()','btn-mint'],gratitude:['💝 '+t('act_grat_t'),'date-bg','finishSession()','btn-rose'],visualize:['🌅 '+t('act_vis_t'),'','finishSession()','btn-primary']};
- const cfg=titles[act.type]||titles.date;
- const refresh=()=>actBox(cfg[0],act.theme||'',cfg[1],'...',`<button class="btn ${cfg[3]} px-4 py-2 text-sm" onclick="${cfg[2]}">✓</button>`);
- refresh();
- chatBusy=true;$('actTyping')?.classList.remove('hidden');
- try{
-  const contents=act.transcript.slice(-14).map(m=>({role:m.role==='user'?'user':'model',parts:[{text:m.text}]}));
-  const ans=await callGemini(act.sys,contents,false);
-  act.transcript.push({role:'model',text:ans.reply});refresh();
- }catch(e){act.transcript.push({role:'model',text:'⚠ '+e.message});refresh();}
- finally{chatBusy=false;$('actTyping')?.classList.add('hidden');}
+ if(!act||chatBusy)return;const input=$('actInput');if(!input)return;const text=input.value.trim();if(!text)return;
+ act.transcript.push({role:'user',text});input.value='';
+ const titles={date:['💖 '+t('act_date_t'),'date-bg','finishDate()','btn-rose'],interview:['🏦 '+t('act_int_t'),'','finishInterview()','btn-mint'],gratitude:['💝 '+t('act_grat_t'),'date-bg','finishSession()','btn-rose'],visualize:['🌅 '+t('act_vis_t'),'','finishSession()','btn-primary']};
+ const cfg=titles[act.type]||titles.date;
+ const refresh=()=>actBox(cfg[0],act.theme||'',cfg[1],'...',`<button class="btn ${cfg[3]} px-4 py-2 text-sm" onclick="${cfg[2]}">✓</button>`);
+ refresh();
+ chatBusy=true;$('actTyping')?.classList.remove('hidden');
+ try{
+  const contents=act.transcript.slice(-14).map(m=>({role:m.role==='user'?'user':'model',parts:[{text:m.text}]}));
+  const ans=await callGemini(act.sys,contents,false);
+  act.transcript.push({role:'model',text:ans.reply});refresh();
+ }catch(e){act.transcript.push({role:'model',text:'⚠ '+e.message});refresh();}
+ finally{chatBusy=false;$('actTyping')?.classList.add('hidden');}
 }
 
 /* ============================================================ НАСТРОЙКИ */
 function renderSettings(){
- const coachCards=Object.entries(COACHES).map(([k,co])=>{const locked=co.locked&&!state.unlocked[k];const active=state.coach===k;return`<button onclick="${locked?'':`selectCoachSetting('${k}')`}" class="card p-4 text-left" style="border:2px solid ${active?'var(--indigo)':'var(--line)'};${locked?'opacity:.55':''}"><div class="text-2xl">${co.emoji}</div><div class="font-extrabold mt-1">${co.name} ${locked?'🔒':''}</div><div class="text-xs" style="color:var(--muted)">${co.role}</div>${active?`<div class="text-xs font-bold mt-1" style="color:var(--indigo)">${t('active_')}</div>`:''}</button>`;}).join('');
- const langBtns=Object.entries(LANGS).map(([k,v])=>`<button class="btn ${state.lang===k?'btn-primary':'btn-ghost'} text-sm px-4 py-2" onclick="setLang('${k}')">${v}</button>`).join('');
- $('app').innerHTML=`<div class="fade space-y-4"><h1 class="display text-2xl font-extrabold">${t('settingsTitle')}</h1>
-  <div class="card p-5"><h2 class="font-extrabold mb-3">${t('langTitle')}</h2><div class="flex gap-2">${langBtns}</div></div>
-  <div class="card p-5"><h2 class="font-extrabold mb-3">${t('chooseCoach')}</h2><div class="grid grid-cols-2 md:grid-cols-4 gap-3">${coachCards}</div></div>
-  <div class="card p-5"><h2 class="font-extrabold mb-1">${t('unlockCoach')}</h2><p class="text-sm mb-3" style="color:var(--muted)">${t('balance')}: <b style="color:var(--indigo)">${state.points} ✨</b></p>
-   <div class="flex items-center gap-3 p-3 rounded-xl" style="background:#fff7e6"><div class="text-3xl">🪨</div><div class="flex-1"><div class="font-extrabold">${COACHES.rock.name} — ${COACHES.rock.role}</div></div>${state.unlocked.rock?`<span class="pill btn-mint">${t('open_')}</span>`:`<button class="btn btn-coral px-4 py-2 text-sm" onclick="unlockRock()">${ROCK_PRICE} ✨</button>`}</div></div>
-  <div class="card p-5"><h2 class="font-extrabold mb-1">${t('aiCoach')}</h2><p class="text-sm" style="color:${(state.apiKey||state.proxyUrl)?'var(--mint)':'var(--coral)'}">${(state.apiKey||state.proxyUrl)?t('aiOn'):t('aiOff')}</p>
-   <label class="flex items-center gap-2 mt-3 text-sm cursor-pointer"><input type="checkbox" ${state.allowImages?'checked':''} onchange="toggleImages(this.checked)" style="width:18px;height:18px;accent-color:var(--indigo)"> ${t('allowImg')}</label></div>
-  <div class="card p-5"><h2 class="font-extrabold mb-1">${t('profileTest')}</h2>${Object.entries(state.scores).map(([k,v])=>`<div class="flex justify-between py-1 text-sm" style="border-bottom:1px solid var(--line)"><span>${esc(tSphere(k))}</span><b style="color:var(--indigo)">${v} / 4</b></div>`).join('')}<button class="btn btn-ghost w-full py-3 mt-4" onclick="retakeTest()">${t('retake')}</button></div>
-  <div class="card p-5"><h2 class="font-extrabold mb-1" style="color:var(--coral)">${t('resetT')}</h2><p class="text-sm mb-3" style="color:var(--muted)">${t('resetSub')}</p><button class="btn px-4 py-3 text-sm" style="background:#ffeceb;color:var(--coral)" onclick="hardReset()">${t('delAll')}</button></div></div>`;
+ const coachCards=Object.entries(COACHES).map(([k,co])=>{const locked=co.locked&&!state.unlocked[k];const active=state.coach===k;return`<button onclick="${locked?'':`selectCoachSetting('${k}')`}" class="card p-4 text-left" style="border:2px solid ${active?'var(--indigo)':'var(--line)'};${locked?'opacity:.55':''}"><div class="text-2xl">${co.emoji}</div><div class="font-extrabold mt-1">${co.name} ${locked?'🔒':''}</div><div class="text-xs" style="color:var(--muted)">${co.role}</div>${active?`<div class="text-xs font-bold mt-1" style="color:var(--indigo)">${t('active_')}</div>`:''}</button>`;}).join('');
+ const langBtns=Object.entries(LANGS).map(([k,v])=>`<button class="btn ${state.lang===k?'btn-primary':'btn-ghost'} text-sm px-4 py-2" onclick="setLang('${k}')">${v}</button>`).join('');
+ $('app').innerHTML=`<div class="fade space-y-4"><h1 class="display text-2xl font-extrabold">${t('settingsTitle')}</h1>
+  <div class="card p-5"><h2 class="font-extrabold mb-3">${t('langTitle')}</h2><div class="flex gap-2">${langBtns}</div></div>
+  <div class="card p-5"><h2 class="font-extrabold mb-3">${t('chooseCoach')}</h2><div class="grid grid-cols-2 md:grid-cols-4 gap-3">${coachCards}</div></div>
+  <div class="card p-5"><h2 class="font-extrabold mb-1">${t('unlockCoach')}</h2><p class="text-sm mb-3" style="color:var(--muted)">${t('balance')}: <b style="color:var(--indigo)">${state.points} ✨</b></p>
+   <div class="flex items-center gap-3 p-3 rounded-xl" style="background:#fff7e6"><div class="text-3xl">🪨</div><div class="flex-1"><div class="font-extrabold">${COACHES.rock.name} — ${COACHES.rock.role}</div></div>${state.unlocked.rock?`<span class="pill btn-mint">${t('open_')}</span>`:`<button class="btn btn-coral px-4 py-2 text-sm" onclick="unlockRock()">${ROCK_PRICE} ✨</button>`}</div></div>
+  <div class="card p-5"><h2 class="font-extrabold mb-1">${t('aiCoach')}</h2><p class="text-sm" style="color:${(state.apiKey||state.proxyUrl)?'var(--mint)':'var(--coral)'}">${(state.apiKey||state.proxyUrl)?t('aiOn'):t('aiOff')}</p>
+   <label class="flex items-center gap-2 mt-3 text-sm cursor-pointer"><input type="checkbox" ${state.allowImages?'checked':''} onchange="toggleImages(this.checked)" style="width:18px;height:18px;accent-color:var(--indigo)"> ${t('allowImg')}</label></div>
+  <div class="card p-5"><h2 class="font-extrabold mb-1">${t('profileTest')}</h2>${Object.entries(state.scores).map(([k,v])=>`<div class="flex justify-between py-1 text-sm" style="border-bottom:1px solid var(--line)"><span>${esc(tSphere(k))}</span><b style="color:var(--indigo)">${v} / 4</b></div>`).join('')}<button class="btn btn-ghost w-full py-3 mt-4" onclick="retakeTest()">${t('retake')}</button></div>
+  <div class="card p-5"><h2 class="font-extrabold mb-1" style="color:var(--coral)">${t('resetT')}</h2><p class="text-sm mb-3" style="color:var(--muted)">${t('resetSub')}</p><button class="btn px-4 py-3 text-sm" style="background:#ffeceb;color:var(--coral)" onclick="hardReset()">${t('delAll')}</button></div></div>`;
 }
 function selectCoachSetting(k){state.coach=k;save();renderSettings();renderNav();}
 function saveApiKey(){state.apiKey=$('apiKeyInput').value.trim();save();renderSettings();}
 function saveProxy(){state.proxyUrl=$('proxyInput').value.trim();save();renderSettings();}
 function toggleImages(v){state.allowImages=v;save();}
 function unlockRock(){
- if(state.points<ROCK_PRICE){modal(t('notEnough'),t('need')+' '+ROCK_PRICE+' ✨');return;}
- addPoints(-ROCK_PRICE);state.unlocked.rock=true;state.coach='rock';
- const w={ru:`WHOA! 🪨 ${state.profile.name||'друг'}, добро пожаловать в команду! NO DAYS OFF. Let's GO! 💥`,en:`WHOA! 🪨 ${state.profile.name||'friend'}, welcome to the team! NO DAYS OFF. Let's GO! 💥`,zh:`WHOA！🪨 ${state.profile.name||'朋友'}，欢迎加入！NO DAYS OFF。Let's GO！💥`}[state.lang||'ru'];
- state.chat.push({role:'coach',coach:'rock',text:w});
- save();render();
+ if(state.points<ROCK_PRICE){modal(t('notEnough'),t('need')+' '+ROCK_PRICE+' ✨');return;}
+ addPoints(-ROCK_PRICE);state.unlocked.rock=true;state.coach='rock';
+ const w={ru:`WHOA! 🪨 ${state.profile.name||'друг'}, добро пожаловать в команду! NO DAYS OFF. Let's GO! 💥`,en:`WHOA! 🪨 ${state.profile.name||'friend'}, welcome to the team! NO DAYS OFF. Let's GO! 💥`,zh:`WHOA！🪨 ${state.profile.name||'朋友'}，欢迎加入！NO DAYS OFF。Let's GO！💥`}[state.lang||'ru'];
+ state.chat.push({role:'coach',coach:'rock',text:w});
+ save();render();
 }
 function retakeTest(){if(!confirm('OK?'))return;state.onboarded=false;testDraft=null;remember('Пользователь проходит тест заново.');save();render();}
 function hardReset(){if(!confirm('OK?'))return;localStorage.removeItem(STORE_KEY);state=defaultState();save();render();}
@@ -1086,4 +1097,4 @@ render();
 Object.assign(window,{navigate,closeModal,testNext,pickAnswer,finishTest,completeTask,toggleHabit,addHabit,removeHabit,advanceChallenge,completeSleep,sendChat,switchCoach,askImage,selectCoachSetting,saveApiKey,saveProxy,toggleImages,unlockRock,retakeTest,hardReset,startDate,finishDate,startIQ,answerIQ,startInterview,finishInterview,actSend,claimChest,setMood,saveIntention,startWorkout,workoutNext,workoutSkip,setLang,startGratitude,startVisualize,finishSession});
 </script>
 </body>
-</html>
+</html>    
