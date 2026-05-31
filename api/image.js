@@ -10,7 +10,7 @@ module.exports = async (req, res) => {
     const { prompt } = req.body;
     
     // Формируем запрос на английском для лучшего понимания моделью, добавляем фитнес-контекст
-    const encodedPrompt = encodeURIComponent('motivational fitness gym aesthetic, no text, ' + prompt);
+    const encodedPrompt = encodeURIComponent(prompt + ', highly detailed, 4k, no text');
     
     // Стучимся в бесплатный синхронный API
     const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=800&nologo=true`;
