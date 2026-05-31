@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Motivation — ИИ-наставник</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --ink:#16223b; --indigo:#4f46e5; --indigo-soft:#eef0ff;
+    --coral:#ff6b5e; --mint:#16b87f; --bg:#f6f7fb; --card:#ffffff;
+    --muted:#7b8499; --line:#e9ebf3; --rose:#ec4899;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Plus Jakarta Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  h1,h2,h3,.display{font-family:'Bricolage Grotesque','Plus Jakarta Sans',sans-serif}
+  .wrap{max-width:980px;margin:0 auto;padding:0 16px 120px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:20px}
+  .btn{cursor:pointer;border:none;font-weight:700;border-radius:14px;transition:.15s;font-family:inherit}
+  .btn:active{transform:translateY(1px)}
+  .btn-primary{background:var(--indigo);color:#fff}.btn-primary:hover{background:#4338ca}
+  .btn-ghost{background:var(--indigo-soft);color:var(--indigo)}
+  .btn-coral{background:var(--coral);color:#fff}
+  .btn-mint{background:var(--mint);color:#fff}
+  .btn-rose{background:var(--rose);color:#fff}
+  .pill{font-size:12px;font-weight:700;border-radius:999px;padding:3px 10px}
+  .fade{animation:fade .35s ease both}
+  @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .nav-item.active{background:var(--indigo);color:#fff}
+  .scroll-x{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .scroll-x::-webkit-scrollbar{height:8px}
+  .scroll-x::-webkit-scrollbar-thumb{background:#cbd2e6;border-radius:8px}
+  .dots span{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--indigo);margin:0 2px;animation:bp 1s infinite}
+  .dots span:nth-child(2){animation-delay:.15s}.dots span:nth-child(3){animation-delay:.3s}
+  @keyframes bp{0%,80%,100%{transform:scale(.6);opacity:.4}40%{transform:scale(1);opacity:1}}
+  input,textarea,select{font-family:inherit} textarea{resize:none}
+  .chatbox::-webkit-scrollbar{width:6px}.chatbox::-webkit-scrollbar-thumb{background:#cbd2e6;border-radius:8px}
+  .date-bg{background:linear-gradient(160deg,#3a1c4d,#7a2d6b 60%,#c0497e)}
+</style>
+</head>
+<body>
+
+<header id="topbar" class="hidden sticky top-0 z-40" style="background:rgba(246,247,251,.9);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)">
+  <div class="wrap" style="padding-bottom:0">
+    <div class="flex items-center justify-between py-3">
+      <div class="display font-extrabold text-2xl" style="color:var(--indigo)">Motivation</div>
+      <div class="flex items-center gap-3">
+        <div class="pill" style="background:#fff;border:1px solid var(--line)"><span id="coachBadge">💖 Аврора</span></div>
+        <div class="pill btn-ghost flex items-center gap-1">✨ <b id="pointsBadge">0</b></div>
+      </div>
+    </div>
+    <nav class="scroll-x pb-3"><div class="flex gap-2 whitespace-nowrap" id="navWrap"></div></nav>
+  </div>
+</header>
+
+<main id="app" class="wrap pt-6"></main>
+
+<div id="modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background:rgba(22,34,59,.45)">
+  <div class="card p-6 max-w-sm w-full fade">
+    <h3 id="modalTitle" class="text-lg font-extrabold mb-2"></h3>
+    <p id="modalMsg" class="text-sm" style="color:var(--muted);white-space:pre-line"></p>
+    <button onclick="closeModal()" class="btn btn-primary w-full mt-5 py-3">Понятно</button>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   MOTIVATION v2 — один файл, localStorage, Gemini API
+   ============================================================ */
+const STORE_KEY='motivationAppState_v2';
+const HABIT_DAYS=21, SLEEP_DAYS=28, ROCK_PRICE=190;
+const COST_DATE=120, COST_IQ=50, COST_INTERVIEW=80;
+const GEMINI_TEXT='gemini-2.5-flash';     // чат. Альтернатива: gemini-flash-latest
+const GEMINI_IMG='gemini-2.5-flash-image'; // картинки (может требовать платный тариф)
+
+/* ---------- ТРЕНЕРЫ ---------- */
+const COACHES={
+  aurora:{name:'Аврора',emoji:'💖',role:'Поддерживающая подруга',color:'#ec4899',locked:false,
+    persona:`Ты — Аврора, поддерживающая подруга и коуч. Тон тёплый, искренний, ободряющий, с эмодзи (💖✨🌟), но без приторности. Веришь в человека, хвалишь за усилие, мягко возвращаешь фокус на маленькие шаги.`},
+  johnny:{name:'Джони',emoji:'💪',role:'Строгий тренер',color:'#0ea5e9',locked:false,
+    persona:`Ты — Джони, строгий тренер по дисциплине. Прямой, требовательный, справедливый. Минимум эмоций — максимум конкретики и действия. Не принимаешь оправданий, требуешь измеримых шагов. Иногда ссылаешься на принципы дисциплины.`},
+  silas:{name:'Сайлас',emoji:'🦉',role:'Мудрый философ',color:'#7c3aed',locked:false,
+    persona:`Ты — Сайлас, мудрый наставник-философ. Спокойный, неторопливый, эмпатичный. Используешь притчи и метафоры. Не даёшь готовых ответов сразу — задаёшь вопросы для самоанализа. Идея: ответы уже внутри человека.`},
+  rock:{name:'Скала',emoji:'🪨',role:'Легендарный мотиватор',color:'#b45309',locked:true,
+    persona:`Ты — «Скала», ОРИГИНАЛЬНЫЙ персонаж-мотиватор этого приложения: харизматичный силач-наставник в духе легендарного рестлера, ставшего символом дисциплины. Энергия зашкаливает, заряжаешь на действие, изредка вставляешь короткие английские кричалки в общем хайповом стиле ("Let's GO!", "No days off!", "Earn it!"). Делишься короткими ВЫМЫШЛЕННЫМИ историями «из своего пути к вершине» как мотивирующими байками персонажа. Важно: ты не реальный человек и не выдаёшь себя за конкретную знаменитость — ты собственный персонаж. Твоя суперсила — анализировать прогресс пользователя по задачам и подбадривать на результат.`},
+};
+
+/* ---------- ПУЛ ЗАДАЧ ---------- */
+const TASK_POOL={
+ 'Здоровье':[{name:'Стакан воды с утра',desc:'Сразу после пробуждения выпей стакан воды до кофе и телефона.',benefit:'Запускает обмен веществ.'},{name:'Обед без экрана',desc:'15 минут ешь в тишине, без гаджетов.',benefit:'Снижает стресс.'},{name:'10 000 шагов',desc:'Набери за день 10 тысяч шагов.',benefit:'Улучшает настроение и сон.'}],
+ 'Спорт':[{name:'5-минутный энерджайзер',desc:'Устал — 5 минут растяжки или приседаний.',benefit:'Поднимает энергию.'},{name:'20 отжиманий',desc:'Сделай 20 отжиманий любым способом.',benefit:'Укрепляет тело и волю.'},{name:'Прогулка 30 минут',desc:'Быстрая прогулка без цели — только движение.',benefit:'Разгружает голову.'}],
+ 'Фокус':[{name:'Помидоро: 25 минут',desc:'25 минут работы, 5 отдыха. 3 цикла.',benefit:'Тренирует концентрацию.'},{name:'Телефон в другую комнату',desc:'На час убери телефон во время дела.',benefit:'Убирает отвлечения.'},{name:'Одна задача за раз',desc:'Доведи одно дело до конца, не переключаясь.',benefit:'Меньше прокрастинации.'}],
+ 'Общение':[{name:'Сказать «нет» один раз',desc:'Вежливо, но твёрдо откажись от лишней просьбы.',benefit:'Здоровые границы.'},{name:'Тёплый контакт',desc:'Доброе сообщение близкому без ожидания ответа.',benefit:'Добавляет тепла.'},{name:'Комплимент',desc:'Искренний комплимент одному человеку.',benefit:'Смелость в общении.'}],
+ 'Обучение':[{name:'10 страниц книги',desc:'Прочитай 10 страниц полезной книги.',benefit:'Кормит мозг.'},{name:'20 минут языка',desc:'Удели 20 минут иностранному языку.',benefit:'Привычка учиться.'},{name:'Конспект идеи',desc:'Запиши новую идею своими словами.',benefit:'Закрепляет знания.'}],
+ 'Мотивация':[{name:'Поймай свой лучик',desc:'Запиши, что сделал хорошо сегодня.',benefit:'Усиливает позитив.'},{name:'Цель на день',desc:'Сформулируй и выполни одну главную цель.',benefit:'Даёт движение.'},{name:'Список «зачем»',desc:'3 причины, ради которых ты развиваешься.',benefit:'Внутренняя мотивация.'}],
+};
+
+const CHALLENGES=[
+ {id:'c1',name:'Осознанный глоток',days:3,desc:'Три дня пьём только чистую воду.',benefit:'Снижение сахара.'},
+ {id:'c2',name:'Утренняя тишина',days:5,desc:'Первые 30 минут после пробуждения — без телефона.',benefit:'Концентрация на день.'},
+ {id:'c3',name:'100% входящих',days:7,desc:'Каждый день доводи inbox до нуля.',benefit:'Меньше цифрового стресса.'},
+ {id:'c4',name:'Свобода от сахара',days:10,desc:'10 дней без добавленного сахара.',benefit:'Стабильная энергия.'},
+ {id:'c5',name:'Закон кодирования',days:14,desc:'14 дней — 10 строк кода/текста/музыки в день.',benefit:'Поток продуктивности.'},
+];
+
+const SLEEP_PLAN=[
+ ['Заведи «Окно сна»','Постоянное время отбоя и подъёма стабилизирует мелатонин и кортизол.',10],
+ ['Ограничь кофеин после 14:00','Период полураспада кофеина — до 6 часов, он мешает глубокому сну.',10],
+ ['Цифровой комендантский час','За час до сна — без экранов. Синий свет подавляет мелатонин.',10],
+ ['Вечерний ритуал','Спокойные повторяющиеся действия сигналят мозгу: пора спать.',15],
+ ['Проветри комнату','Идеальная температура сна — 18–20°C.',10],
+ ['Лёгкий перекус','Без тяжёлой еды за 2–3 часа. Голоден — банан или орехи.',10],
+ ['Тело-сканирование','Медитация на расслабление тела снимает напряжение.',20],
+ ['Убери часы','Не следи за временем ночью — меньше тревоги.',10],
+ ['Активность днём','Упражнения (не перед сном) делают сон глубже.',15],
+ ['Маска и беруши','Темнота и тишина помогают мелатонину.',10],
+ ['Power nap 20 минут','Дневной сон — не дольше 20 минут.',10],
+ ['Травяной чай','Ромашковый чай вместо вечерних напитков.',10],
+ ['Дыхание 4-7-8','Вдох 4, задержка 7, выдох 8 — расслабляет.',20],
+ ['Больше магния','Тёмный шоколад, орехи, шпинат расслабляют нервную систему.',15],
+ ['Кровать = только сон','Не работай и не ешь в постели.',10],
+ ['Список забот','Выпиши тревоги и дела на завтра перед сном.',15],
+ ['Тёплый душ','Нагрев и охлаждение тела вызывают сонливость.',10],
+ ['Контроль света','Вечером — приглушённый тёплый свет.',10],
+ ['Белый шум','Шум маскирует резкие звуки.',10],
+ ['Стойкость на выходных','Держи режим и в субботу — без социального джетлага.',20],
+ ['Медитация благодарности','3 вещи, за которые благодарен, перед сном.',25],
+ ['Мышечная релаксация','Напрягай и расслабляй мышцы по очереди.',15],
+ ['Утренний свет','10 минут солнца после пробуждения перезапускают ритм.',15],
+ ['Без жидкости за час','Меньше воды перед сном — меньше пробуждений.',10],
+ ['Ароматерапия','Лаванда создаёт ассоциацию с отдыхом.',10],
+ ['Дневник сна','Записывай время засыпания и пробуждения.',15],
+ ['План на завтра','Короткое планирование снижает тревогу.',15],
+ ['Празднуй победу!','Ты выстроил здоровый цикл сна за 28 дней!',50],
+].map((p,i)=>({day:i+1,title:p[0],why:p[1],bonus:p[2],done:false}));
+
+const TEST_Q=[
+ {sphere:'Здоровье',q:'Насколько ты доволен своим сном и питанием?'},
+ {sphere:'Спорт',q:'Как часто ты двигаешься / занимаешься спортом?'},
+ {sphere:'Фокус',q:'Получается ли удерживать внимание на важных делах?'},
+ {sphere:'Общение',q:'Насколько легко тебе общаться и отстаивать границы?'},
+ {sphere:'Обучение',q:'Как часто ты узнаёшь и осваиваешь новое?'},
+ {sphere:'Мотивация',q:'Насколько ты замотивирован двигаться к целям?'},
+];
+const TEST_OPTS=['Совсем плохо','Бывают проблемы','В целом норм','Отлично'];
+
+/* ---------- IQ-ТЕСТ (локальные вопросы) ---------- */
+const IQ_QUESTIONS=[
+ {q:'Продолжи ряд: 2, 4, 8, 16, ?',opts:['24','32','30','20'],a:1},
+ {q:'Лишнее слово:',opts:['Роза','Тюльпан','Дуб','Ромашка'],a:2},
+ {q:'Если все «грифы» — птицы, а некоторые птицы летают, то...',opts:['Все грифы летают','Некоторые грифы могут летать','Грифы не птицы','Грифы не летают'],a:1},
+ {q:'Продолжи: 1, 1, 2, 3, 5, 8, ?',opts:['11','12','13','15'],a:2},
+ {q:'Книга относится к чтению, как вилка к...',opts:['Кухне','Еде','Металлу','Ложке'],a:1},
+ {q:'Сколько месяцев в году имеют 28 дней?',opts:['1','2','6','12'],a:3},
+ {q:'Продолжи ряд: 3, 6, 11, 18, ?',opts:['25','27','29','24'],a:1},
+ {q:'Лишнее число:',opts:['9','16','25','30'],a:3},
+ {q:'Какое слово получится из «АКЕР» (анаграмма)?',opts:['РЕКА','КЕРА','АРЕК','ЕКАР'],a:0},
+ {q:'Если вчера было воскресенье через 3 дня, какой сегодня день?',opts:['Среда','Четверг','Пятница','Суббота'],a:2},
+];
+
+/* ---------- ТЕМЫ СВИДАНИЯ ---------- */
+const DATE_THEMES=[
+ 'Прогулка по старому городу под тёплым дождём, вы делите один зонт',
+ 'Уютная кофейня поздним вечером, за окном горят фонари',
+ 'Пикник на холме под звёздным небом, термос с чаем',
+ 'Набережная на закате, лёгкий ветер с моря',
+ 'Маленькая книжная лавка с тёплым светом и запахом кофе',
+];
+
+/* ============================================================ */
+let state=null;
+function defaultState(){
+ return {
+  onboarded:false,
+  profile:{name:'',age:'',gender:'',situation:''},
+  scores:{}, coach:'aurora', points:0, unlocked:{rock:false}, apiKey:'', proxyUrl:'', allowImages:false,
+  tasks:[], archive:[],
+  habits:[
+   {id:'h1',name:'Сон',target:'8 часов',days:Array(HABIT_DAYS).fill(0)},
+   {id:'h2',name:'Спорт',target:'30 мин',days:Array(HABIT_DAYS).fill(0)},
+   {id:'h3',name:'Чтение',target:'10 страниц',days:Array(HABIT_DAYS).fill(0)},
+   {id:'h4',name:'Язык',target:'20 мин',days:Array(HABIT_DAYS).fill(0)},
+  ],
+  sleep:SLEEP_PLAN.map(s=>({...s})),
+  challenges:CHALLENGES.map(c=>({...c,progress:0,done:false})),
+  chat:[],            // {role:'user'|'coach', coach, text, img?}
+  memory:[],          // долговременные факты (свидания, IQ, собес)
+  view:'home', completedCount:0,
+  iqBest:null, datesCount:0, interviewsCount:0,
+  xp:0, streak:0, lastActiveDate:'', freezeTokens:0, lastChestDate:'',
+  mood:{date:'',val:0}, intention:{date:'',text:''},
+ };
+}
+function load(){try{const r=localStorage.getItem(STORE_KEY);state=r?Object.assign(defaultState(),JSON.parse(r)):defaultState();}catch(e){state=defaultState();}}
+function save(){try{localStorage.setItem(STORE_KEY,JSON.stringify(state));}catch(e){}}
+
+/* ---------- утилиты ---------- */
+function $(id){return document.getElementById(id);}
+function esc(s){return(s||'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
+function modal(t,m){$('modalTitle').textContent=t;$('modalMsg').textContent=m;$('modal').classList.remove('hidden');}
+function closeModal(){$('modal').classList.add('hidden');}
+function uid(){return'id'+Math.random().toString(36).slice(2,9);}
+function addPoints(n){state.points=Math.max(0,state.points+n);if(n>0)state.xp=(state.xp||0)+n;}
+/* ---- даты и геймификация ---- */
+function todayStr(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function daysBetween(a,b){return Math.round((new Date(b)-new Date(a))/86400000);}
+function touchStreak(){
+ const t=todayStr();if(!state.lastActiveDate){state.streak=1;state.lastActiveDate=t;save();return;}
+ if(state.lastActiveDate===t)return;
+ const gap=daysBetween(state.lastActiveDate,t);
+ let saved=false;
+ if(gap===1){state.streak++;}
+ else if(gap>=2){if(state.freezeTokens>0){state.freezeTokens--;state.streak++;saved=true;}else{state.streak=1;}}
+ state.lastActiveDate=t;
+ if(state.streak>0&&state.streak%7===0)state.freezeTokens++;
+ save();
+ if(saved)setTimeout(()=>modal('Заморозка спасла серию! ❄️','Ты пропустил день, но заморозка сохранила твою серию. Продолжаем!'),400);
+}
+function levelInfo(){
+ const xp=state.xp||0;const R=[[0,'Новичок'],[100,'Искатель'],[300,'Ученик'],[700,'Боец'],[1500,'Мастер'],[3000,'Чемпион'],[6000,'Легенда']];
+ let lvl=1,title='Новичок',cur=0,next=100;
+ for(let i=0;i<R.length;i++){if(xp>=R[i][0]){lvl=i+1;title=R[i][1];cur=R[i][0];next=R[i+1]?R[i+1][0]:R[i][0];}}
+ const pct=next>cur?Math.min(100,Math.round((xp-cur)/(next-cur)*100)):100;
+ return{lvl,title,xp,cur,next,pct};
+}
+function isFreshStart(){const d=new Date();return d.getDay()===1||d.getDate()===1;}
+function remember(fact){state.memory.push(fact);if(state.memory.length>20)state.memory=state.memory.slice(-20);}
+function timeContext(){
+ const d=new Date(),h=d.getHours();
+ let part=h<5?'глубокая ночь':h<12?'утро':h<17?'день':h<22?'вечер':'поздний вечер';
+ const days=['воскресенье','понедельник','вторник','среда','четверг','пятница','суббота'];
+ return `${part}, ${String(h).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}, ${days[d.getDay()]}`;
+}
+function navigate(v){if(!state.onboarded&&v!=='test')return;state.view=v;save();render();window.scrollTo({top:0,behavior:'smooth'});}
+
+/* ============================================================
+   ОНБОРДИНГ / ТЕСТ
+   ============================================================ */
+let testDraft=null;
+function renderTest(){
+ $('topbar').classList.add('hidden');
+ if(!testDraft)testDraft={step:0,profile:{name:'',age:'',gender:'',situation:''},answers:{}};
+ const app=$('app');
+ if(testDraft.step===0){
+  app.innerHTML=`<div class="fade" style="max-width:560px;margin:0 auto">
+   <div class="text-center mb-8 mt-6"><div class="display font-extrabold text-4xl" style="color:var(--indigo)">Motivation</div>
+   <p class="mt-2" style="color:var(--muted)">ИИ-наставник, который помогает строить полезные привычки</p></div>
+   <div class="card p-6">
+    <h2 class="text-xl font-extrabold mb-1">Шаг 1. Знакомство</h2>
+    <p class="text-sm mb-5" style="color:var(--muted)">Данные останутся на твоём устройстве.</p>
+    <label class="block text-sm font-bold mb-1">Как тебя зовут?</label>
+    <input id="f_name" class="w-full mb-4 px-4 py-3 rounded-xl" style="border:1px solid var(--line)" placeholder="Имя" value="${esc(testDraft.profile.name)}">
+    <div class="flex gap-3 mb-4">
+     <div class="flex-1"><label class="block text-sm font-bold mb-1">Возраст</label>
+      <input id="f_age" type="number" class="w-full px-4 py-3 rounded-xl" style="border:1px solid var(--line)" placeholder="18" value="${esc(testDraft.profile.age)}"></div>
+     <div class="flex-1"><label class="block text-sm font-bold mb-1">Пол</label>
+      <select id="f_gender" class="w-full px-4 py-3 rounded-xl bg-white" style="border:1px solid var(--line)">
+       <option value="">—</option><option ${testDraft.profile.gender==='Мужской'?'selected':''}>Мужской</option>
+       <option ${testDraft.profile.gender==='Женский'?'selected':''}>Женский</option>
+       <option ${testDraft.profile.gender==='Другое'?'selected':''}>Другое</option></select></div></div>
+    <label class="block text-sm font-bold mb-1">Что хочешь развить? С чем есть сложности?</label>
+    <textarea id="f_sit" rows="4" class="w-full mb-5 px-4 py-3 rounded-xl" style="border:1px solid var(--line)" placeholder="Например: побороть прокрастинацию и наладить сон...">${esc(testDraft.profile.situation)}</textarea>
+    <button class="btn btn-primary w-full py-3" onclick="testNext()">Далее →</button>
+   </div></div>`;
+ }else{
+  const qHtml=TEST_Q.map((item,qi)=>`<div class="card p-5 mb-3">
+   <div class="text-sm font-bold mb-1" style="color:var(--indigo)">${esc(item.sphere)}</div>
+   <div class="font-bold mb-3">${esc(item.q)}</div>
+   <div class="grid grid-cols-2 gap-2">${TEST_OPTS.map((o,oi)=>`<button onclick="pickAnswer('${item.sphere}',${oi+1},this)" class="ans btn text-sm py-2 ${testDraft.answers[item.sphere]===oi+1?'btn-primary':'btn-ghost'}">${esc(o)}</button>`).join('')}</div></div>`).join('');
+  app.innerHTML=`<div class="fade" style="max-width:560px;margin:0 auto">
+   <div class="mb-5 mt-2"><h2 class="text-xl font-extrabold">Шаг 2. Точки роста</h2>
+   <p class="text-sm" style="color:var(--muted)">Ответь честно — от этого зависят твои задания.</p></div>
+   ${qHtml}<button class="btn btn-primary w-full py-3 mb-4" onclick="finishTest()">Завершить тест ✓</button></div>`;
+ }
+}
+function testNext(){testDraft.profile={name:$('f_name').value.trim()||'Друг',age:$('f_age').value.trim(),gender:$('f_gender').value,situation:$('f_sit').value.trim()};testDraft.step=1;renderTest();}
+function pickAnswer(sphere,val,btn){testDraft.answers[sphere]=val;btn.parentElement.querySelectorAll('.ans').forEach(b=>{b.classList.remove('btn-primary');b.classList.add('btn-ghost');});btn.classList.remove('btn-ghost');btn.classList.add('btn-primary');}
+function finishTest(){
+ if(Object.keys(testDraft.answers).length<TEST_Q.length){modal('Почти готово','Ответь на все вопросы — так тренер лучше тебя поймёт.');return;}
+ state.profile=testDraft.profile;state.scores=testDraft.answers;state.onboarded=true;
+ state.tasks=generateStarterTasks(testDraft.answers);
+ state.chat=[{role:'coach',coach:state.coach,text:greeting(state.coach)}];
+ remember(`Пользователь прошёл тест. Результаты (1=слабо,4=отлично): ${JSON.stringify(state.scores)}. О себе: ${state.profile.situation||'—'}`);
+ state.view='home';testDraft=null;save();render();
+ modal('Готово! 🎉','Собрал 10 персональных заданий в «Задачах». Открой «Чат» — тренер уже знает результаты теста.');
+}
+function generateStarterTasks(scores){
+ const spheres=Object.keys(TASK_POOL),weighted=[];
+ spheres.forEach(sp=>{const sc=scores[sp]||2;for(let i=0;i<5-sc;i++)weighted.push(sp);});
+ const picked=[],used=new Set();let g=0;
+ while(picked.length<10&&g<400){g++;const sp=weighted[Math.floor(Math.random()*weighted.length)]||spheres[Math.floor(Math.random()*spheres.length)];const pool=TASK_POOL[sp];const t=pool[Math.floor(Math.random()*pool.length)];const k=sp+'|'+t.name;if(used.has(k))continue;used.add(k);picked.push({id:uid(),sphere:sp,name:t.name,desc:t.desc,benefit:t.benefit});}
+ return picked;
+}
+
+/* ============================================================
+   КАРКАС
+   ============================================================ */
+const NAV=[
+ {v:'home',label:'🏠 Главная'},{v:'tasks',label:'📋 Задачи'},{v:'progress',label:'📈 Прогресс'},
+ {v:'challenges',label:'🔥 Челленджи'},{v:'sleep',label:'🌙 Сон'},{v:'chat',label:'💬 Чат'},
+ {v:'activities',label:'🎮 Активности'},{v:'settings',label:'⚙️ Настройки'},
+];
+function renderNav(){
+ $('navWrap').innerHTML=NAV.map(n=>`<button class="nav-item btn ${state.view===n.v?'active':'btn-ghost'} text-sm px-4 py-2" onclick="navigate('${n.v}')">${n.label}</button>`).join('');
+ $('coachBadge').textContent=`${COACHES[state.coach].emoji} ${COACHES[state.coach].name}`;
+ $('pointsBadge').textContent=state.points;
+}
+function render(){
+ if(!state.onboarded){renderTest();return;}
+ $('topbar').classList.remove('hidden');renderNav();
+ ({home:renderHome,tasks:renderTasks,progress:renderProgress,challenges:renderChallenges,sleep:renderSleep,chat:renderChat,activities:renderActivities,settings:renderSettings}[state.view]||renderHome)();
+}
+
+/* ============================================================ ГЛАВНАЯ */
+function renderHome(){
+ const doneTasks=state.archive.length,totalTasks=state.tasks.length+state.archive.length;
+ const taskPct=totalTasks?Math.round(doneTasks/totalTasks*100):0;
+ const sleepDone=state.sleep.filter(s=>s.done).length,chDone=state.challenges.filter(c=>c.done).length;
+ const tc=timeContext();const hour=new Date().getHours();
+ const hi=hour<5?'Доброй ночи':hour<12?'Доброе утро':hour<17?'Добрый день':'Добрый вечер';
+ $('app').innerHTML=`<div class="fade">
+  <div class="card p-6 mb-4" style="background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none">
+   <div class="text-sm opacity-90">${hi},</div>
+   <div class="display text-3xl font-extrabold">${esc(state.profile.name||'Друг')} 👋</div>
+   <div class="mt-4 flex items-end gap-2"><div class="display text-5xl font-extrabold">${state.points}</div><div class="mb-1 opacity-90">бонусных очков ✨</div></div>
+   <div class="text-xs opacity-80 mt-1">Сейчас ${tc}. Трать очки в «Активностях» и «Настройках».</div></div>
+  ${dailyBlocksHtml()}
+  <div class="grid grid-cols-3 gap-3 mb-4">
+   ${statCard('Задачи',doneTasks+' / '+totalTasks,taskPct+'% выполнено')}
+   ${statCard('Челленджи',chDone+' / '+state.challenges.length,'завершено')}
+   ${statCard('Сон 28д',sleepDone+' / '+SLEEP_DAYS,'дней пройдено')}</div>
+  <div class="card p-6 mb-4"><div class="flex items-center justify-between mb-4"><h2 class="text-lg font-extrabold">Прогресс по задачам</h2><span class="pill btn-ghost">${taskPct}%</span></div>${donut(taskPct)}</div>
+  <div class="card p-6"><h2 class="text-lg font-extrabold mb-3">Твой тренер</h2>
+   <div class="flex items-center gap-4"><div class="text-4xl">${COACHES[state.coach].emoji}</div>
+   <div><div class="font-extrabold">${COACHES[state.coach].name}</div><div class="text-sm" style="color:var(--muted)">${COACHES[state.coach].role}</div></div>
+   <button class="btn btn-primary px-4 py-2 ml-auto text-sm" onclick="navigate('chat')">Открыть чат</button></div></div></div>`;
+}
+function dailyBlocksHtml(){
+ const lv=levelInfo();const t=todayStr();
+ const MOODS=['😞','😐','🙂','😄','🔥'];
+ const canChest=state.lastChestDate!==t;
+ const moodSet=state.mood&&state.mood.date===t;
+ const intSet=state.intention&&state.intention.date===t&&state.intention.text;
+ let html=`<div class="grid grid-cols-2 gap-3 mb-4">
+  <div class="card p-4"><div class="flex items-center gap-2"><div class="text-3xl">🔥</div><div><div class="display text-2xl font-extrabold">${state.streak}</div><div class="text-[11px]" style="color:var(--muted)">дней подряд${state.freezeTokens?` · ❄️${state.freezeTokens}`:''}</div></div></div></div>
+  <div class="card p-4"><div class="flex items-center justify-between"><div class="font-bold text-sm">Ур. ${lv.lvl} · ${lv.title}</div><div class="text-[11px]" style="color:var(--muted)">${lv.xp} XP</div></div><div style="height:8px;background:#eef0ff;border-radius:6px;margin-top:8px;overflow:hidden"><div style="height:100%;width:${lv.pct}%;background:linear-gradient(90deg,#4f46e5,#16b87f);transition:.5s"></div></div></div>
+ </div>`;
+ if(isFreshStart())html+=`<div class="card p-4 mb-4" style="background:linear-gradient(135deg,#16b87f,#0ea5e9);color:#fff;border:none"><div class="font-extrabold">✨ Новая глава!</div><div class="text-sm opacity-90">Сегодня идеальный день для свежего старта. Исследования о «эффекте чистого листа» говорят: начинать в понедельник или 1-го числа проще. Задай намерение ниже.</div></div>`;
+ html+=`<div class="card p-5 mb-4"><h2 class="text-lg font-extrabold mb-3">Ежедневный ритуал</h2>`;
+ // сундук
+ html+=canChest
+  ?`<button class="btn btn-coral w-full py-3 mb-3" onclick="claimChest()">🎁 Открыть сундук дня</button>`
+  :`<div class="text-sm mb-3 p-3 rounded-xl" style="background:var(--indigo-soft);color:var(--indigo)">🎁 Сундок дня уже открыт — возвращайся завтра!</div>`;
+ // настроение
+ if(!moodSet){
+  html+=`<div class="text-sm font-bold mb-2">Как ты сегодня?</div><div class="flex gap-2 mb-3">${MOODS.map((m,i)=>`<button class="btn btn-ghost text-2xl py-2 flex-1" onclick="setMood(${i+1})">${m}</button>`).join('')}</div>`;
+ }else{
+  html+=`<div class="text-sm mb-3" style="color:var(--muted)">Настроение дня: <b>${MOODS[state.mood.val-1]}</b> — тренер это учтёт 💬</div>`;
+ }
+ // намерение (implementation intention)
+ if(!intSet){
+  html+=`<div class="text-sm font-bold mb-1">Намерение дня (по формуле «Если…, то…»)</div><div class="text-[11px] mb-2" style="color:var(--muted)">Учёные (Гольвитцер) доказали: такой план резко повышает шанс довести дело до конца.</div><div class="flex gap-2"><input id="intInput" class="flex-1 px-4 py-3 rounded-xl text-sm" style="border:1px solid var(--line)" placeholder="Если выпью кофе, то сделаю 25 минут учёбы"><button class="btn btn-primary px-4" onclick="saveIntention()">ОК</button></div>`;
+ }else{
+  html+=`<div class="text-sm p-3 rounded-xl" style="background:#f0fdf4;color:#166534">🎯 ${esc(state.intention.text)}</div>`;
+ }
+ html+=`</div>`;
+ return html;
+}
+function claimChest(){
+ const t=todayStr();if(state.lastChestDate===t)return;
+ state.lastChestDate=t;
+ const rewards=[5,10,10,15,20,30];const gain=rewards[Math.floor(Math.random()*rewards.length)];
+ addPoints(gain);save();render();
+ modal('🎁 Сундук открыт!','Тебе выпало +'+gain+' очков ✨ Возвращайся завтра за новым.');
+}
+function setMood(v){state.mood={date:todayStr(),val:v};save();render();}
+function saveIntention(){const el=$('intInput');if(!el||!el.value.trim())return;state.intention={date:todayStr(),text:el.value.trim()};remember('Намерение на '+todayStr()+': '+state.intention.text);save();render();}
+function statCard(t,b,s){return`<div class="card p-4 text-center"><div class="text-xs font-bold" style="color:var(--muted)">${t}</div><div class="display text-2xl font-extrabold mt-1">${b}</div><div class="text-[11px]" style="color:var(--muted)">${s}</div></div>`;}
+function donut(pct){const r=54,c=2*Math.PI*r,off=c-(pct/100)*c;return`<div class="flex items-center justify-center"><svg width="150" height="150" viewBox="0 0 150 150"><circle cx="75" cy="75" r="${r}" fill="none" stroke="#eef0ff" stroke-width="16"/><circle cx="75" cy="75" r="${r}" fill="none" stroke="url(#g1)" stroke-width="16" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${off}" transform="rotate(-90 75 75)" style="transition:stroke-dashoffset .6s"/><text x="75" y="83" text-anchor="middle" font-size="30" font-weight="800" fill="#16223b">${pct}%</text><defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f46e5"/><stop offset="1" stop-color="#16b87f"/></linearGradient></defs></svg></div>`;}
+
+/* ============================================================ ЗАДАЧИ */
+function renderTasks(){
+ const active=state.tasks.map(t=>taskCard(t,false)).join('')||`<p class="text-sm" style="color:var(--muted)">Активных задач нет. Попроси тренера в «Чате» добавить новые!</p>`;
+ const arch=state.archive.length?state.archive.slice().reverse().map(t=>taskCard(t,true)).join(''):`<p class="text-sm" style="color:var(--muted)">Здесь будут выполненные задачи.</p>`;
+ $('app').innerHTML=`<div class="fade"><div class="flex items-center justify-between mb-4"><h1 class="display text-2xl font-extrabold">Активные задачи (${state.tasks.length})</h1><span class="pill btn-ghost">+5–10 ✨ за задачу</span></div><div class="space-y-3">${active}</div><h2 class="display text-xl font-extrabold mt-8 mb-3">Архив (${state.archive.length})</h2><div class="space-y-3 opacity-90">${arch}</div></div>`;
+}
+function taskCard(t,done){return`<div class="card p-4 flex items-start gap-3" style="border-left:4px solid ${done?'var(--mint)':'var(--indigo)'}"><div class="flex-1"><div class="font-extrabold ${done?'line-through opacity-60':''}">${esc(t.name)} <span class="pill" style="background:var(--indigo-soft);color:var(--indigo);margin-left:6px">${esc(t.sphere)}</span>${t.byCoach?`<span class="pill" style="background:#fff3e8;color:#b45309;margin-left:4px">от тренера</span>`:''}</div><div class="text-sm mt-1" style="color:var(--muted)">${esc(t.desc)}</div><div class="text-xs mt-2" style="color:var(--mint)">🔥 ${esc(t.benefit)}</div></div>${done?`<div class="text-2xl">✅</div>`:`<button class="btn btn-mint px-3 py-2 text-sm" onclick="completeTask('${t.id}')">Готово</button>`}</div>`;}
+function completeTask(id){
+ const i=state.tasks.findIndex(t=>t.id===id);if(i<0)return;
+ const[t]=state.tasks.splice(i,1);state.archive.push(t);
+ const gain=5+Math.floor(Math.random()*6);addPoints(gain);state.completedCount++;
+ save();render();modal('+'+gain+' очков ✨','Задача «'+t.name+'» выполнена!');
+ if(state.unlocked.rock&&state.completedCount%5===0)rockAnalysisLetter();
+}
+
+/* ============================================================ ПРОГРЕСС */
+function renderProgress(){
+ const bars=[];
+ for(let d=0;d<HABIT_DAYS;d++){let done=0;state.habits.forEach(h=>{if(h.days[d])done++;});const pct=state.habits.length?Math.round(done/state.habits.length*100):0;const hue=Math.round(pct*1.2);bars.push(`<div class="flex flex-col items-center justify-end" style="min-width:26px"><div title="День ${d+1}: ${pct}%" style="width:18px;height:${Math.max(6,pct*1.1)}px;background:hsl(${hue} 75% 45%);border-radius:5px 5px 0 0;transition:.4s"></div><div class="text-[10px] mt-1" style="color:var(--muted)">${d+1}</div></div>`);}
+ const head=`<th class="text-left px-3 py-2 sticky left-0 bg-white" style="z-index:2">Привычка</th>`+Array.from({length:HABIT_DAYS},(_,d)=>`<th class="px-2 py-2 text-xs" style="color:var(--muted)">${d+1}</th>`).join('');
+ const rows=state.habits.map(h=>{const cells=h.days.map((v,d)=>`<td class="text-center px-1"><input type="checkbox" ${v?'checked':''} onchange="toggleHabit('${h.id}',${d})" style="width:18px;height:18px;accent-color:var(--mint);cursor:pointer"></td>`).join('');return`<tr style="border-top:1px solid var(--line)"><td class="px-3 py-2 sticky left-0 bg-white" style="z-index:1"><div class="font-bold text-sm">${esc(h.name)}</div><div class="text-[11px]" style="color:var(--muted)">${esc(h.target)}</div><button onclick="removeHabit('${h.id}')" class="text-[11px]" style="color:var(--coral)">удалить</button></td>${cells}</tr>`;}).join('');
+ $('app').innerHTML=`<div class="fade"><h1 class="display text-2xl font-extrabold mb-1">Дневной трекер привычек (21 день)</h1><p class="text-sm mb-5" style="color:var(--muted)">Столбик загорается красным и зеленеет по мере прогресса.</p><div class="card p-5 mb-4"><div class="font-bold mb-3">Процент выполнения по дням</div><div class="scroll-x"><div class="flex items-end gap-1" style="height:140px;min-width:560px">${bars.join('')}</div></div></div><div class="card p-3 mb-4"><div class="flex items-center justify-between px-2 py-2"><div class="font-bold">Ежедневные отметки</div><button class="btn btn-ghost text-sm px-3 py-2" onclick="addHabit()">+ Привычка</button></div><div class="scroll-x"><table class="text-sm" style="border-collapse:collapse;min-width:760px"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div></div></div>`;
+}
+function toggleHabit(id,d){const h=state.habits.find(x=>x.id===id);if(!h)return;h.days[d]=h.days[d]?0:1;save();renderProgress();renderNav();}
+function addHabit(){const name=prompt('Название привычки:');if(!name)return;const target=prompt('Цель в день (например: 10 минут):')||'';state.habits.push({id:uid(),name:name.trim(),target:target.trim(),days:Array(HABIT_DAYS).fill(0)});save();renderProgress();}
+function removeHabit(id){if(!confirm('Удалить привычку?'))return;state.habits=state.habits.filter(h=>h.id!==id);save();renderProgress();}
+
+/* ============================================================ ЧЕЛЛЕНДЖИ */
+function renderChallenges(){
+ const cards=state.challenges.map(c=>{const pct=Math.round(c.progress/c.days*100),hue=Math.round(pct*1.2);return`<div class="card p-5" style="border-left:4px solid ${c.done?'var(--mint)':'var(--coral)'}"><div class="flex items-start justify-between gap-3"><div><div class="font-extrabold">${esc(c.name)} <span class="text-sm" style="color:var(--muted)">(${c.days} дн.)</span></div><div class="text-sm mt-1" style="color:var(--muted)">${esc(c.desc)}</div><div class="text-xs mt-1" style="color:var(--mint)">🔥 ${esc(c.benefit)}</div></div>${c.done?`<span class="pill btn-mint">ЗАВЕРШЕНО</span>`:`<button class="btn btn-ghost px-3 py-2 text-sm" onclick="advanceChallenge('${c.id}')">+1 день</button>`}</div><div class="mt-3 text-xs font-bold" style="color:var(--muted)">Прогресс: ${c.progress} / ${c.days}</div><div style="height:10px;background:#eef0ff;border-radius:8px;margin-top:6px;overflow:hidden"><div style="height:100%;width:${pct}%;background:hsl(${hue} 75% 45%);transition:.4s"></div></div></div>`;}).join('');
+ $('app').innerHTML=`<div class="fade"><h1 class="display text-2xl font-extrabold mb-1">Челленджи (${state.challenges.length})</h1><p class="text-sm mb-5" style="color:var(--muted)">За завершённый челлендж — бонусные очки.</p><div class="space-y-3">${cards}</div></div>`;
+}
+function advanceChallenge(id){const c=state.challenges.find(x=>x.id===id);if(!c||c.done)return;c.progress=Math.min(c.days,c.progress+1);if(c.progress>=c.days){c.done=true;const gain=c.days*3;addPoints(gain);save();render();modal('Челлендж завершён! 🏆','«'+c.name+'» пройден. +'+gain+' очков ✨');return;}save();renderChallenges();renderNav();}
+
+/* ============================================================ СОН */
+function renderSleep(){
+ const done=state.sleep.filter(s=>s.done).length;
+ const cards=state.sleep.map(s=>`<div class="card p-5" style="border-left:4px solid ${s.done?'var(--mint)':'var(--coral)'}"><div class="flex items-center justify-between"><div class="font-extrabold" style="color:${s.done?'var(--mint)':'var(--ink)'}">День ${s.day}</div><span class="pill" style="background:#fff7e6;color:#b45309">+${s.bonus} ✨</span></div><div class="font-bold mt-2 ${s.done?'line-through opacity-60':''}">${esc(s.title)}</div><div class="text-sm mt-2" style="color:var(--muted)">${esc(s.why)}</div>${s.done?`<div class="mt-3 text-sm font-bold" style="color:var(--mint)">Выполнено ✓</div>`:`<button class="btn btn-coral px-4 py-2 text-sm mt-3" onclick="completeSleep(${s.day})">Отметить</button>`}</div>`).join('');
+ $('app').innerHTML=`<div class="fade"><div class="card p-6 mb-4" style="background:linear-gradient(135deg,#312e81,#4f46e5);color:#fff;border:none"><div class="display text-2xl font-extrabold">28 дней здорового сна 🌙</div><div class="mt-1 opacity-90 text-sm">Пройдено ${done} из ${SLEEP_DAYS}.</div></div><div class="grid md:grid-cols-2 gap-3">${cards}</div></div>`;
+}
+function completeSleep(day){const s=state.sleep.find(x=>x.day===day);if(!s||s.done)return;s.done=true;addPoints(s.bonus);save();renderSleep();renderNav();modal('+'+s.bonus+' очков ✨','День '+day+' пройден.');}
+
+/* ============================================================
+   ЧАТ (единый, все тренеры, память)
+   ============================================================ */
+function greeting(k){
+ const c=COACHES[k],weak=weakestSphere();
+ if(k==='aurora')return`Привет-привет! ${c.emoji} Я Аврора. По тесту вижу: особенно подтянем сферу «${weak}». Захочешь новых задач — напиши «добавь задачу по фокусу», и я закину их в «Задачи». С чего начнём? 🌟`;
+ if(k==='johnny')return`На связи Джони. ${c.emoji} Слабое место по тесту — «${weak}». Будем работать. Скажешь что нужно — добавлю конкретные задачи. Без оправданий. 🚀`;
+ if(k==='silas')return`Здравствуй, путник. ${c.emoji} Тест шепнул о сфере «${weak}». Скажи: чего ты хочешь на самом деле? Попросишь — предложу задачи для размышления. ⏳`;
+ if(k==='rock')return`WHOA! Ты здесь! ${c.emoji} Я — Скала, твой персональный мотиватор. Зона роста по тесту — «${weak}», и мы её РАЗНЕСЁМ. No days off! Скажешь «дай задачу» — закину авторское задание. Let's GO! 💥`;
+ return`Привет! Я ${c.name}.`;
+}
+function weakestSphere(){let min=99,sp='Мотивация';Object.entries(state.scores||{}).forEach(([k,v])=>{if(v<min){min=v;sp=k;}});return sp;}
+
+let chatBusy=false;
+function renderChat(){
+ const c=COACHES[state.coach];
+ const msgs=state.chat.map(m=>{
+  if(m.role==='user')return`<div class="flex justify-end mb-3"><div class="px-4 py-3 rounded-2xl rounded-br-md max-w-[80%] text-sm" style="background:var(--indigo);color:#fff">${esc(m.text)}</div></div>`;
+  const cc=COACHES[m.coach]||c;
+  const imgHtml=m.img?`<img src="${m.img}" style="max-width:240px;border-radius:14px;margin-top:8px;display:block">`:'';
+  return`<div class="flex justify-start mb-3 gap-2"><div class="text-xl">${cc.emoji}</div><div class="px-4 py-3 rounded-2xl rounded-bl-md max-w-[80%] text-sm" style="background:#fff;border:1px solid var(--line)"><b style="color:${cc.color}">${cc.name}</b><br>${esc(m.text).replace(/\n/g,'<br>')}${imgHtml}</div></div>`;
+ }).join('');
+ const switcher=Object.entries(COACHES).map(([k,co])=>{const locked=co.locked&&!state.unlocked[k];return`<button onclick="${locked?`modal('Тренер закрыт','Разблокируй «${co.name}» в Настройках за ${ROCK_PRICE} очков.')`:`switchCoach('${k}')`}" class="btn text-sm px-3 py-2 ${state.coach===k?'btn-primary':'btn-ghost'}" ${locked?'style="opacity:.55"':''}>${co.emoji} ${co.name}${locked?' 🔒':''}</button>`;}).join('');
+ $('app').innerHTML=`<div class="fade"><div class="card p-4 mb-3" style="background:${c.color}18;border-color:${c.color}55"><div class="font-extrabold" style="color:${c.color}">${c.emoji} Единый чат · сейчас отвечает ${c.name}</div><div class="text-sm" style="color:var(--muted)">Все тренеры в одном чате, помнят историю и результаты теста. Переключай тренера кнопками ниже.</div></div><div class="scroll-x mb-3"><div class="flex gap-2">${switcher}</div></div><div class="card p-4"><div id="chatbox" class="chatbox" style="height:46vh;min-height:300px;overflow-y:auto;padding-right:4px">${msgs}</div><div id="typing" class="hidden text-sm px-2 mt-1" style="color:var(--muted)">${c.name} печатает <span class="dots"><span></span><span></span><span></span></span></div><div class="flex gap-2 mt-3"><input id="chatInput" class="flex-1 px-4 py-3 rounded-xl text-sm" style="border:1px solid var(--line)" placeholder="Напиши ${c.name}..." onkeydown="if(event.key==='Enter')sendChat()">${state.allowImages?`<button class="btn btn-ghost px-3" title="Сгенерировать картинку" onclick="askImage()">🖼</button>`:''}<button class="btn btn-primary px-5" onclick="sendChat()">➤</button></div></div></div>`;
+ const cb=$('chatbox');if(cb)cb.scrollTop=cb.scrollHeight;
+}
+function switchCoach(k){state.coach=k;const last=[...state.chat].reverse().find(m=>m.role==='coach');if(!last||last.coach!==k)state.chat.push({role:'coach',coach:k,text:greeting(k)});save();renderChat();renderNav();}
+
+async function sendChat(){
+ if(chatBusy)return;const input=$('chatInput'),text=input.value.trim();if(!text)return;
+ state.chat.push({role:'user',text});input.value='';save();renderChat();
+ if(!state.apiKey&&!state.proxyUrl){state.chat.push({role:'coach',coach:state.coach,text:'Чтобы я отвечал по-настоящему, добавь в «Настройках» либо ключ Gemini (начинается на AIza), либо адрес своего ИИ-сервера. 🙂'});save();renderChat();return;}
+ chatBusy=true;$('typing')?.classList.remove('hidden');
+ try{
+  const ans=await callGemini(buildSystem(COACHES[state.coach]),mainContents());
+  state.chat.push({role:'coach',coach:state.coach,text:ans.reply});
+  if(Array.isArray(ans.newTasks))ans.newTasks.slice(0,3).forEach(t=>state.tasks.push({id:uid(),sphere:t.sphere||weakestSphere(),name:t.name||'Новая задача',desc:t.desc||'',benefit:t.benefit||'',byCoach:true}));
+  save();renderChat();renderNav();
+ }catch(e){state.chat.push({role:'coach',coach:state.coach,text:'Не вышло связаться с ИИ 😕 Проверь ключ Gemini в «Настройках» и интернет. ('+e.message+')'});save();renderChat();}
+ finally{chatBusy=false;$('typing')?.classList.add('hidden');}
+}
+
+/* системная инструкция: персона + профиль + память + время */
+function buildSystem(c){
+ return `${c.persona}
+
+КОНТЕКСТ:
+- Пользователь: ${state.profile.name||'?'}, возраст ${state.profile.age||'?'}, пол ${state.profile.gender||'?'}.
+- О себе: ${state.profile.situation||'—'}
+- Результаты теста (1=слабо,4=отлично): ${JSON.stringify(state.scores)}
+- Долговременная память (важные факты прошлых сессий): ${state.memory.slice(-12).join(' | ')||'пусто'}
+- Сейчас по времени пользователя: ${timeContext()}. Учитывай это (например, вечером — мягче, утром — бодрее).
+- Серия активных дней: ${state.streak}. Уровень: ${levelInfo().lvl} (${levelInfo().title}).
+- Настроение сегодня (1=плохо,5=отлично): ${state.mood&&state.mood.date===todayStr()?state.mood.val:'не указано'}. Если настроение низкое — будь бережнее.
+- Намерение дня пользователя: ${state.intention&&state.intention.date===todayStr()?state.intention.text:'не задано'}.
+- Выполнено задач всего: ${state.completedCount}.
+
+ПРАВИЛА:
+- Отвечай СТРОГО в своей манере, кратко (2–5 предложений), по-русски, на «ты».
+- Помни историю диалога ниже и память выше.
+- Если пользователь просит задачи/мотивацию/план — добавь 1–3 НОВЫХ конкретных задания.
+- Сферы только: Здоровье, Спорт, Фокус, Общение, Обучение, Мотивация.
+- Верни ЧИСТЫЙ JSON без markdown:
+{"reply":"текст пользователю","newTasks":[{"sphere":"...","name":"...","desc":"...","benefit":"..."}]}
+- Не нужны задачи — "newTasks": [].`;
+}
+/* контекст: последние 16 реплик единого чата с пометкой тренера */
+function mainContents(){
+ return state.chat.slice(-16).map(m=>({role:m.role==='user'?'user':'model',parts:[{text:(m.role==='coach'?`[${COACHES[m.coach]?.name||'Тренер'}]: `:'')+m.text}]}));
+}
+
+/* ---------- маршрутизация ИИ: свой прокси ИЛИ прямой Gemini ---------- */
+async function callGemini(systemText,contents,wantJson=true){
+ if(state.proxyUrl)return callProxy(systemText,contents,wantJson);
+ return callGeminiDirect(systemText,contents,wantJson);
+}
+async function callProxy(systemText,contents,wantJson){
+ const res=await fetch(state.proxyUrl.replace(/\/$/,'')+'/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system:systemText,contents,wantJson})});
+ if(!res.ok)throw new Error('proxy HTTP '+res.status);
+ const d=await res.json();
+ return{reply:typeof d.reply==='string'?d.reply:JSON.stringify(d),newTasks:Array.isArray(d.newTasks)?d.newTasks:[]};
+}
+async function callGeminiDirect(systemText,contents,wantJson=true){
+ const body={system_instruction:{parts:[{text:systemText}]},contents,generationConfig:{temperature:0.9}};
+ if(wantJson)body.generationConfig.responseMimeType='application/json';
+ const url=`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT}:generateContent?key=${encodeURIComponent(state.apiKey)}`;
+ const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+ if(!res.ok)throw new Error('HTTP '+res.status);
+ const data=await res.json();
+ let raw=data?.candidates?.[0]?.content?.parts?.[0]?.text||'';
+ if(!wantJson)return{reply:raw,newTasks:[]};
+ raw=raw.replace(/```json|```/g,'').trim();
+ try{const p=JSON.parse(raw);if(typeof p.reply!=='string')p.reply=raw;if(!Array.isArray(p.newTasks))p.newTasks=[];return p;}
+ catch(e){return{reply:raw||'Я тебя услышал. Продолжаем!',newTasks:[]};}
+}
+
+/* ---------- генерация картинки ---------- */
+function askImage(){const p=prompt('Опиши картинку, которую сгенерировать:');if(p)generateImage(p);}
+async function generateImage(promptText){
+ if(!state.apiKey&&!state.proxyUrl){modal('Нужен ИИ','Добавь ключ Gemini или адрес своего ИИ-сервера в «Настройках».');return;}
+ chatBusy=true;$('typing')?.classList.remove('hidden');
+ try{
+  let dataUrl;
+  if(state.proxyUrl){
+   const r=await fetch(state.proxyUrl.replace(/\/$/,'')+'/image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:promptText})});
+   if(!r.ok)throw new Error('proxy HTTP '+r.status);
+   const dd=await r.json();
+   if(!dd.image)throw new Error('картинка не пришла');
+   dataUrl=dd.image;
+  }else{
+   const url=`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_IMG}:generateContent?key=${encodeURIComponent(state.apiKey)}`;
+   const body={contents:[{role:'user',parts:[{text:'Мотивационная иллюстрация, без текста на картинке: '+promptText}]}],generationConfig:{responseModalities:['IMAGE']}};
+   const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+   if(!res.ok)throw new Error('HTTP '+res.status+' (генерация картинок может требовать платный тариф)');
+   const data=await res.json();
+   const part=(data?.candidates?.[0]?.content?.parts||[]).find(p=>p.inlineData||p.inline_data);
+   const inline=part?.inlineData||part?.inline_data;
+   if(!inline)throw new Error('картинка не пришла');
+   dataUrl='data:'+(inline.mimeType||inline.mime_type||'image/png')+';base64,'+inline.data;
+  }
+  state.chat.push({role:'coach',coach:state.coach,text:'Держи! 🎨',img:dataUrl});
+  save();renderChat();
+ }catch(e){state.chat.push({role:'coach',coach:state.coach,text:'Не удалось сгенерировать картинку 😕 '+e.message});save();renderChat();}
+ finally{chatBusy=false;$('typing')?.classList.add('hidden');}
+}
+
+/* ---------- суперписьмо Скалы ---------- */
+async function rockAnalysisLetter(){
+ const done=state.completedCount;
+ if(!state.apiKey&&!state.proxyUrl){state.chat.push({role:'coach',coach:'rock',text:`🪨 СКАЛА НА СВЯЗИ! Ты закрыл уже ${done} задач — это СИСТЕМА, а не случайность! No days off! 💥 (Подключи ИИ в «Настройках» — и письма станут мощнее.)`});save();if(state.view==='chat')renderChat();return;}
+ try{
+  const sys=buildSystem(COACHES.rock)+`\nСЕЙЧАС: напиши мотивационное ПИСЬМО-АНАЛИЗ. Пользователь выполнил ${done} задач. Похвали за системность, отметь прогресс по тесту, дай одно наставление. БЕЗ новых задач.`;
+  const ans=await callGemini(sys,[{role:'user',parts:[{text:'Проанализируй мой прогресс и напиши письмо.'}]}]);
+  state.chat.push({role:'coach',coach:'rock',text:'📜 Письмо от Скалы:\n\n'+ans.reply});
+  save();if(state.view==='chat')renderChat();
+  modal('Письмо от Скалы 📜','Скала разобрал твой прогресс — загляни в «Чат».');
+ }catch(e){}
+}
+
+/* ============================================================
+   АКТИВНОСТИ (за очки)
+   ============================================================ */
+function renderActivities(){
+ $('app').innerHTML=`<div class="fade space-y-4"><h1 class="display text-2xl font-extrabold">Активности</h1>
+  <p class="text-sm" style="color:var(--muted)">Баланс: <b style="color:var(--indigo)">${state.points} ✨</b>. Особые сценарии с тренерами за очки.</p>
+  ${activityCard('💖','Свидание с Авророй','Романтическая атмосфера и живой диалог как тренажёр уверенности. В конце — бережный разбор: что было классно и что улучшить.',COST_DATE,`startDate()`,'btn-rose',state.datesCount?`Свиданий: ${state.datesCount}`:'')}
+  ${activityCard('🦉','IQ-тест с Сайласом','10 интерактивных задач на логику, ряды и эрудицию. Сайлас подведёт итог и начислит очки за верные ответы.',COST_IQ,`startIQ()`,'btn-primary',state.iqBest!=null?`Лучший результат: ${state.iqBest}/10`:'')}
+  ${activityCard('🏦','Собеседование в банк','Пробное интервью на стажировку: вопросы на логику, мотивацию и компетенции. В конце — отчёт с оценкой и советами.',COST_INTERVIEW,`startInterview()`,'btn-mint',state.interviewsCount?`Пройдено: ${state.interviewsCount}`:'')}
+ </div>`;
+}
+function activityCard(emoji,title,desc,cost,fn,btn,note){
+ return`<div class="card p-5"><div class="flex items-start gap-4"><div class="text-3xl">${emoji}</div><div class="flex-1"><div class="font-extrabold">${title}</div><div class="text-sm mt-1" style="color:var(--muted)">${desc}</div>${note?`<div class="text-xs mt-1" style="color:var(--mint)">${note}</div>`:''}</div><button class="btn ${btn} px-4 py-2 text-sm whitespace-nowrap" onclick="${fn}">${cost} ✨</button></div></div>`;
+}
+
+/* ---------- общий движок «фокус-сессии» ---------- */
+let act=null; // {type, sys, transcript:[], theme, qIndex}
+function actBox(title,subtitle,bg,placeholder,extraBtn){
+ const msgs=act.transcript.map(m=>m.role==='user'
+   ?`<div class="flex justify-end mb-3"><div class="px-4 py-3 rounded-2xl rounded-br-md max-w-[82%] text-sm" style="background:#fff;color:var(--ink)">${esc(m.text)}</div></div>`
+   :`<div class="flex justify-start mb-3 gap-2"><div class="text-xl">${act.emoji}</div><div class="px-4 py-3 rounded-2xl rounded-bl-md max-w-[82%] text-sm" style="background:rgba(255,255,255,.12);color:#fff;backdrop-filter:blur(4px)">${esc(m.text).replace(/\n/g,'<br>')}</div></div>`).join('');
+ $('app').innerHTML=`<div class="fade"><div class="card p-4 mb-3 ${bg}" style="border:none;color:#fff"><div class="font-extrabold">${title}</div><div class="text-sm opacity-90">${subtitle}</div></div>
+  <div class="card p-4 ${bg}" style="border:none"><div id="actbox" class="chatbox" style="height:50vh;min-height:320px;overflow-y:auto;padding-right:4px">${msgs}</div>
+  <div id="actTyping" class="hidden text-sm px-2 mt-1" style="color:#fff;opacity:.85">печатает <span class="dots"><span></span><span></span><span></span></span></div>
+  <div class="flex gap-2 mt-3"><input id="actInput" class="flex-1 px-4 py-3 rounded-xl text-sm" style="border:none" placeholder="${placeholder}" onkeydown="if(event.key==='Enter')actSend()"><button class="btn btn-primary px-5" onclick="actSend()">➤</button></div>
+  <div class="mt-2 text-center">${extraBtn}</div></div></div>`;
+ const b=$('actbox');if(b)b.scrollTop=b.scrollHeight;
+}
+
+/* ---------- СВИДАНИЕ С АВРОРОЙ ---------- */
+function startDate(){
+ if(!state.apiKey&&!state.proxyUrl){modal('Нужен ИИ','Свидание ведёт ИИ — добавь ключ Gemini или адрес ИИ-сервера в «Настройках».');return;}
+ if(state.points<COST_DATE){modal('Не хватает очков','Нужно '+COST_DATE+' ✨, у тебя '+state.points+'.');return;}
+ addPoints(-COST_DATE);save();
+ const theme=DATE_THEMES[Math.floor(Math.random()*DATE_THEMES.length)];
+ act={type:'date',emoji:'💖',theme,transcript:[]};
+ act.sys=`Ты — Аврора, ведёшь романтическое свидание-симуляцию как ДОБРЫЙ ТРЕНАЖЁР уверенности и навыков общения. Атмосфера: «${theme}». Будь тёплой, искренней, обаятельной, заинтересованной и слегка игривой — но СТРОГО без пошлости и без сексуального содержания, по-доброму и уважительно. Живо реагируй на то, как пользователь себя проявляет (комплименты, вопросы, инициатива, юмор). Веди диалог по одной реплике. НЕ завершай свидание сама — жди кнопку «Завершить». Отвечай обычным текстом (не JSON), по-русски, на «ты». Сейчас: ${timeContext()}.`;
+ act.transcript.push({role:'model',text:`Привет 💖 Как красиво здесь… ${theme.toLowerCase()}. Я рада, что мы выбрались. Расскажи — как прошёл твой день?`});
+ state.datesCount++;save();
+ actBox('💖 Свидание с Авророй','Тема: '+theme,'date-bg','Что ответишь Авроре...',`<button class="btn btn-rose px-4 py-2 text-sm" onclick="finishDate()">Завершить свидание и получить отчёт</button>`);
+}
+async function finishDate(){
+ if(!act||act.type!=='date')return;
+ $('actTyping')?.classList.remove('hidden');
+ try{
+  const convo=act.transcript.map(m=>(m.role==='user'?'Пользователь: ':'Аврора: ')+m.text).join('\n');
+  const sys=`Ты — Аврора. Свидание (тема «${act.theme}») завершено. Напиши ТЁПЛЫЙ и ЧЕСТНЫЙ отчёт-обратную связь как друг и коуч по общению. Структура: 1) Что было классно (2-3 конкретных момента). 2) Что можно улучшить (бережно, 1-2 пункта про инициативу/вопросы/уверенность). 3) Один совет на будущее. По-русски, тепло, без пошлости. Обычный текст.`;
+  const ans=await callGemini(sys,[{role:'user',parts:[{text:convo||'Диалог был коротким.'}]}],false);
+  remember(`Было свидание с Авророй (тема: ${act.theme}). Краткий итог отчёта: ${ans.reply.slice(0,180)}`);
+  state.chat.push({role:'coach',coach:'aurora',text:'💌 Отчёт со свидания:\n\n'+ans.reply});
+  act=null;state.view='chat';save();render();
+  modal('Свидание завершено 💖','Аврора оставила отчёт в «Чате». Он сохранён в её памяти.');
+ }catch(e){$('actTyping')?.classList.add('hidden');modal('Ошибка','Не вышло сформировать отчёт: '+e.message);}
+}
+
+/* ---------- IQ-ТЕСТ С САЙЛАСОМ (локальные вопросы) ---------- */
+let iq=null;
+function startIQ(){
+ if(state.points<COST_IQ){modal('Не хватает очков','Нужно '+COST_IQ+' ✨, у тебя '+state.points+'.');return;}
+ addPoints(-COST_IQ);save();
+ iq={i:0,correct:0,order:IQ_QUESTIONS.map((_,k)=>k)};
+ renderIQ();
+}
+function renderIQ(){
+ if(iq.i>=IQ_QUESTIONS.length){finishIQ();return;}
+ const qd=IQ_QUESTIONS[iq.i];
+ $('app').innerHTML=`<div class="fade" style="max-width:600px;margin:0 auto"><div class="card p-4 mb-3" style="background:linear-gradient(135deg,#4c1d95,#7c3aed);color:#fff;border:none"><div class="font-extrabold">🦉 IQ-тест с Сайласом</div><div class="text-sm opacity-90">Вопрос ${iq.i+1} из ${IQ_QUESTIONS.length} · спокойно, ответ внутри тебя</div></div>
+  <div class="card p-6"><div class="font-bold text-lg mb-4">${esc(qd.q)}</div><div class="grid gap-2">${qd.opts.map((o,k)=>`<button class="btn btn-ghost text-left px-4 py-3" onclick="answerIQ(${k})">${esc(o)}</button>`).join('')}</div></div></div>`;
+}
+function answerIQ(k){if(k===IQ_QUESTIONS[iq.i].a)iq.correct++;iq.i++;renderIQ();}
+async function finishIQ(){
+ const correct=iq.correct,total=IQ_QUESTIONS.length;
+ const reward=correct*8;addPoints(reward);
+ const est=85+Math.round(correct/total*45); // условный «индекс» 85..130 для интереса
+ if(state.iqBest==null||correct>state.iqBest)state.iqBest=correct;
+ remember(`Прошёл IQ-тест: ${correct}/${total} верных, условный индекс ~${est}.`);
+ let silasText=`Ты ответил верно на ${correct} из ${total}. Условный индекс ~${est}. Помни: это игра ума, а не приговор — настоящий интеллект растёт от любопытства. +${reward} ✨`;
+ if(state.apiKey){
+  try{const sys=buildSystem(COACHES.silas)+`\nСЕЙЧАС: пользователь прошёл IQ-игру (${correct}/${total}, индекс ~${est}). Дай короткое мудрое напутствие (3-4 предложения) в своём стиле, без новых задач. Обычный текст.`;
+   const ans=await callGemini(sys,[{role:'user',parts:[{text:'Я закончил тест.'}]}],false);silasText=ans.reply+`\n\nРезультат: ${correct}/${total} · индекс ~${est} · +${reward} ✨`;}catch(e){}
+ }
+ state.chat.push({role:'coach',coach:'silas',text:'🧠 Итоги IQ-теста:\n\n'+silasText});
+ iq=null;state.view='chat';save();render();
+ modal('Тест пройден 🦉',`${correct}/${total} верных. +${reward} ✨\nСайлас оставил напутствие в «Чате».`);
+}
+
+/* ---------- СОБЕСЕДОВАНИЕ В БАНК ---------- */
+function startInterview(){
+ if(!state.apiKey&&!state.proxyUrl){modal('Нужен ИИ','Собеседование ведёт ИИ — добавь ключ Gemini или адрес ИИ-сервера в «Настройках».');return;}
+ if(state.points<COST_INTERVIEW){modal('Не хватает очков','Нужно '+COST_INTERVIEW+' ✨, у тебя '+state.points+'.');return;}
+ addPoints(-COST_INTERVIEW);save();
+ act={type:'interview',emoji:'🏦',transcript:[],qIndex:0};
+ act.sys=`Ты — HR-интервьюер крупного банка (стажировка/начальная позиция). Проводишь ПРОБНОЕ собеседование как тренажёр. Задавай вопросы ПО ОДНОМУ, всего около 6: смесь на (1) логику/нестандартное мышление, (2) мотивацию и ценности, (3) компетенции и опыт. Реагируй коротко и профессионально, затем задавай следующий вопрос. Не выставляй оценку до конца. По-русски, вежливо, по-деловому. Обычный текст. Сейчас: ${timeContext()}.`;
+ act.transcript.push({role:'model',text:`Здравствуйте, ${state.profile.name||''}! Спасибо, что пришли на собеседование. Давайте начнём: расскажите коротко о себе и почему вас заинтересовала позиция в нашем банке?`});
+ save();
+ actBox('🏦 Собеседование в банк','Пробное интервью · отвечай развёрнуто','','Ваш ответ интервьюеру...',`<button class="btn btn-mint px-4 py-2 text-sm" onclick="finishInterview()">Завершить и получить отчёт</button>`);
+ $('app').querySelectorAll('.date-bg').forEach(e=>e.classList.remove('date-bg'));
+}
+async function finishInterview(){
+ if(!act||act.type!=='interview')return;
+ $('actTyping')?.classList.remove('hidden');
+ try{
+  const convo=act.transcript.map(m=>(m.role==='user'?'Кандидат: ':'Интервьюер: ')+m.text).join('\n');
+  const sys=`Ты — старший HR крупного банка. Собеседование завершено. Дай профессиональный ОТЧЁТ по кандидату. Оцени по шкале 1-10 три блока: Логика, Мотивация, Компетенции — и общий балл. Для каждого — короткий комментарий. В конце 2-3 конкретных совета, как улучшиться. По-русски, по-деловому, доброжелательно. Обычный текст.`;
+  const ans=await callGemini(sys,[{role:'user',parts:[{text:convo}]}],false);
+  state.interviewsCount++;
+  remember(`Прошёл пробное собеседование в банк. Краткий итог: ${ans.reply.slice(0,180)}`);
+  state.chat.push({role:'coach',coach:'johnny',text:'🏦 Отчёт по собеседованию:\n\n'+ans.reply});
+  act=null;state.view='chat';save();render();
+  modal('Собеседование завершено 🏦','Отчёт с оценками и советами — в «Чате».');
+ }catch(e){$('actTyping')?.classList.add('hidden');modal('Ошибка','Не вышло сформировать отчёт: '+e.message);}
+}
+
+/* общий обработчик ввода для фокус-сессий (свидание/собес) */
+async function actSend(){
+ if(!act||chatBusy)return;const input=$('actInput'),text=input.value.trim();if(!text)return;
+ act.transcript.push({role:'user',text});input.value='';
+ const refresh=act.type==='date'
+   ?()=>actBox('💖 Свидание с Авророй','Тема: '+act.theme,'date-bg','Что ответишь Авроре...',`<button class="btn btn-rose px-4 py-2 text-sm" onclick="finishDate()">Завершить свидание и получить отчёт</button>`)
+   :()=>{actBox('🏦 Собеседование в банк','Пробное интервью · отвечай развёрнуто','','Ваш ответ интервьюеру...',`<button class="btn btn-mint px-4 py-2 text-sm" onclick="finishInterview()">Завершить и получить отчёт</button>`);};
+ refresh();
+ chatBusy=true;$('actTyping')?.classList.remove('hidden');
+ try{
+  const contents=act.transcript.slice(-14).map(m=>({role:m.role==='user'?'user':'model',parts:[{text:m.text}]}));
+  const ans=await callGemini(act.sys,contents,false);
+  act.transcript.push({role:'model',text:ans.reply});refresh();
+ }catch(e){act.transcript.push({role:'model',text:'(связь прервалась: '+e.message+')'});refresh();}
+ finally{chatBusy=false;$('actTyping')?.classList.add('hidden');}
+}
+
+/* ============================================================ НАСТРОЙКИ */
+function renderSettings(){
+ const coachCards=Object.entries(COACHES).map(([k,co])=>{const locked=co.locked&&!state.unlocked[k];const active=state.coach===k;return`<button onclick="${locked?'':`selectCoachSetting('${k}')`}" class="card p-4 text-left" style="border:2px solid ${active?'var(--indigo)':'var(--line)'};${locked?'opacity:.55':''}"><div class="text-2xl">${co.emoji}</div><div class="font-extrabold mt-1">${co.name} ${locked?'🔒':''}</div><div class="text-xs" style="color:var(--muted)">${co.role}</div>${active?`<div class="text-xs font-bold mt-1" style="color:var(--indigo)">Активен</div>`:''}</button>`;}).join('');
+ $('app').innerHTML=`<div class="fade space-y-4"><h1 class="display text-2xl font-extrabold">Настройки</h1>
+  <div class="card p-5"><h2 class="font-extrabold mb-3">Выбор тренера</h2><div class="grid grid-cols-2 md:grid-cols-4 gap-3">${coachCards}</div></div>
+  <div class="card p-5"><h2 class="font-extrabold mb-1">Разблокировка тренера</h2><p class="text-sm mb-3" style="color:var(--muted)">Баланс: <b style="color:var(--indigo)">${state.points} ✨</b></p>
+   <div class="flex items-center gap-3 p-3 rounded-xl" style="background:#fff7e6"><div class="text-3xl">🪨</div><div class="flex-1"><div class="font-extrabold">Скала — Легендарный мотиватор</div><div class="text-xs" style="color:var(--muted)">Максимум энергии + супер-письма с анализом прогресса каждые 5 задач</div></div>${state.unlocked.rock?`<span class="pill btn-mint">Открыт</span>`:`<button class="btn btn-coral px-4 py-2 text-sm" onclick="unlockRock()">${ROCK_PRICE} ✨</button>`}</div></div>
+  <div class="card p-5"><h2 class="font-extrabold mb-1">ИИ-тренер (ключ Gemini)</h2><p class="text-sm mb-3" style="color:var(--muted)">aistudio.google.com → Get API key. Ключ начинается на <b>AIza</b>. Хранится только в твоём браузере.</p>
+   <div class="flex gap-2"><input id="apiKeyInput" type="password" class="flex-1 px-4 py-3 rounded-xl text-sm" style="border:1px solid var(--line)" placeholder="Вставь ключ Gemini (AIza...)" value="${esc(state.apiKey)}"><button class="btn btn-primary px-4" onclick="saveApiKey()">Сохранить</button></div>
+   <div class="text-xs mt-2" style="color:${state.apiKey?(state.apiKey.startsWith('AIza')?'var(--mint)':'var(--coral)'):'var(--muted)'}">${state.apiKey?(state.apiKey.startsWith('AIza')?'Ключ сохранён ✓ — ИИ активен':'⚠ Это не похоже на ключ Gemini (он начинается на AIza)'):'Ключ не задан — тренер отвечает шаблонно'}</div>
+   <label class="flex items-center gap-2 mt-4 text-sm cursor-pointer"><input type="checkbox" ${state.allowImages?'checked':''} onchange="toggleImages(this.checked)" style="width:18px;height:18px;accent-color:var(--indigo)"> Разрешить генерацию картинок (экспериментально, может требовать платный тариф)</label>
+   <div class="mt-4 pt-4" style="border-top:1px dashed var(--line)"><div class="font-bold text-sm mb-1">Свой ИИ-сервер (рекомендуется)</div><p class="text-xs mb-2" style="color:var(--muted)">Если Gemini недоступен в твоём регионе (например, РФ) — подними свой прокси-сервер и вставь его адрес. Ключ спрячется на сервере, и всё заработает на любом устройстве. Если задан — используется вместо прямого Gemini.</p><div class="flex gap-2"><input id="proxyInput" class="flex-1 px-4 py-3 rounded-xl text-sm" style="border:1px solid var(--line)" placeholder="https://твой-проект.vercel.app/api" value="${esc(state.proxyUrl)}"><button class="btn btn-primary px-4" onclick="saveProxy()">Сохранить</button></div><div class="text-xs mt-2" style="color:${state.proxyUrl?'var(--mint)':'var(--muted)'}">${state.proxyUrl?'Сервер подключён ✓ — используется вместо прямого Gemini':'Не задан'}</div></div></div>
+  <div class="card p-5"><h2 class="font-extrabold mb-1">Профиль (результаты теста)</h2>${Object.entries(state.scores).map(([k,v])=>`<div class="flex justify-between py-1 text-sm" style="border-bottom:1px solid var(--line)"><span>${esc(k)}</span><b style="color:var(--indigo)">${v} / 4</b></div>`).join('')}<button class="btn btn-ghost w-full py-3 mt-4" onclick="retakeTest()">🔄 Пройти тест заново</button></div>
+  <div class="card p-5"><h2 class="font-extrabold mb-1" style="color:var(--coral)">Сброс</h2><p class="text-sm mb-3" style="color:var(--muted)">Полностью очистить все данные.</p><button class="btn px-4 py-3 text-sm" style="background:#ffeceb;color:var(--coral)" onclick="hardReset()">Удалить все данные</button></div></div>`;
+}
+function selectCoachSetting(k){state.coach=k;save();renderSettings();renderNav();}
+function saveApiKey(){state.apiKey=$('apiKeyInput').value.trim();save();renderSettings();}
+function saveProxy(){state.proxyUrl=$('proxyInput').value.trim();save();renderSettings();}
+function toggleImages(v){state.allowImages=v;save();}
+function unlockRock(){
+ if(state.points<ROCK_PRICE){modal('Не хватает очков','Нужно '+ROCK_PRICE+' ✨, у тебя '+state.points+'.');return;}
+ addPoints(-ROCK_PRICE);state.unlocked.rock=true;state.coach='rock';
+ state.chat.push({role:'coach',coach:'rock',text:`WHOA WHOA WHOA! 🪨 ${state.profile.name||'друг'}, добро пожаловать в команду! Я — Скала, и я не просто тренер — я СИЛА, которая не даст тебе сдаться. Прошёл путь от нуля до вершины через пот и дисциплину — и проведу тебя тем же маршрутом. Правило одно: NO DAYS OFF. Каждые 5 закрытых задач — личное письмо с разбором прогресса. Готов? Then let's GO! 💥`});
+ save();render();modal('Скала разблокирован! 🪨','Он поздоровался в «Чате» и стал активным тренером.');
+}
+function retakeTest(){if(!confirm('Пройти тест заново? Баллы и задачи сохранятся, тренеры узнают новые результаты.'))return;state.onboarded=false;testDraft=null;remember('Пользователь решил пройти тест заново — результаты будут обновлены.');state.chat.push({role:'coach',coach:state.coach,text:'Вижу, ты проходишь тест заново — отлично, обновим картину! После него загляни за свежим советом. 💡'});save();render();}
+function hardReset(){if(!confirm('Точно удалить ВСЕ данные?'))return;localStorage.removeItem(STORE_KEY);state=defaultState();save();render();}
+
+/* ============================================================ СТАРТ */
+load();
+if(state.onboarded)touchStreak();
+render();
+Object.assign(window,{navigate,closeModal,testNext,pickAnswer,finishTest,completeTask,toggleHabit,addHabit,removeHabit,advanceChallenge,completeSleep,sendChat,switchCoach,askImage,selectCoachSetting,saveApiKey,saveProxy,toggleImages,unlockRock,retakeTest,hardReset,startDate,finishDate,startIQ,answerIQ,startInterview,finishInterview,actSend,claimChest,setMood,saveIntention});
+</script>
+</body>
+</html>
