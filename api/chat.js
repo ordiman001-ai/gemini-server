@@ -10,13 +10,10 @@ module.exports = async (req, res) => {
   try {
     const { system, contents, wantJson } = req.body;
     const KEY = process.env.GEMINI_API_KEY;
-    if (!KEY) return res.status(200).json({ reply: 'На сервере не задан GEMINI_API_KEY. Проверь Environment Variables на Vercel и сделай Redeploy.', newTasks: [] });
+    if (!KEY) return res.status(200).json({ reply: 'На сервере не задан GEMINI_API_KEY.', newTasks: [] });
 
-    // Преобразуем формат данных под стандарт OpenAI, который использует прокси Polza
     const messages = [];
-    if (system) {
-      messages.push({ role: 'system', content: system });
-    }
+    if (system) messages.push({ role: 'system', content: system });
     
     if (contents && Array.isArray(contents)) {
       contents.forEach(msg => {
@@ -25,42 +22,33 @@ module.exports = async (req, res) => {
       });
     }
 
-    const body = {
-      model: MODEL,
-      messages: messages,
-      temperature: 0.9
-    };
-
+    const body = { model: MODEL, messages: messages, temperature: 0.9 };
     if (wantJson) body.response_format = { type: "json_object" };
 
-    // Стучимся на эндпоинт Polza AI
     const r = await fetch('https://api.polza.ai/v1/chat/completions', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${KEY}`
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KEY}` },
       body: JSON.stringify(body)
     });
     
     const data = await r.json();
+    if (data.error) return res.status(200).json({ reply: 'Ошибка API: ' + (data.error.message || JSON.stringify(data.error)), newTasks: [] });
 
-    if (data.error) {
-      return res.status(200).json({ reply: 'Ошибка API: ' + (data.error.message || JSON.stringify(data.error)), newTasks: [] });
-    }
-
-    // Достаем ответ в новом формате
     let raw = data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : '';
-    if (!raw) return res.status(200).json({ reply: 'Пустой ответ от прокси: ' + JSON.stringify(data).slice(0, 300), newTasks: [] });
+    if (!raw) return res.status(200).json({ reply: 'Пустой ответ от прокси', newTasks: [] });
 
     if (!wantJson) return res.status(200).json({ reply: raw, newTasks: [] });
     
     raw = raw.replace(/```json|```/g, '').trim();
     try {
       const p = JSON.parse(raw);
-      return res.status(200).json({ reply: p.reply || raw, newTasks: Array.isArray(p.newTasks) ? p.newTasks : [] });
+      return res.status(200).json({ 
+        reply: p.reply || raw, 
+        newTasks: Array.isArray(p.newTasks) ? p.newTasks : [],
+        imagePrompt: p.imagePrompt || null // Теперь сервер отправляет картинку в приложение
+      });
     } catch (e) {
-      return res.status(200).json({ reply: raw, newTasks: [] });
+      return res.status(200).json({ reply: raw, newTasks: [], imagePrompt: null });
     }
   } catch (e) {
     return res.status(500).json({ error: String(e) });
