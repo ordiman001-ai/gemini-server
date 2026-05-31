@@ -25,7 +25,7 @@ module.exports = async (req, res) => {
     const parts = (((data.candidates || [])[0] || {}).content || {}).parts || [];
     const img = parts.find(p => p.inlineData || p.inline_data);
     const inline = img && (img.inlineData || img.inline_data);
-    if (!inline) return res.status(200).json({ error: 'нет картинки. Ответ Google: ' + JSON.stringify(data).slice(0, 500) });
+    if (!inline) return res.status(200).json({ error: 'Ответ Google: ' + JSON.stringify(data).slice(0, 600) });
     return res.status(200).json({ image: 'data:' + (inline.mimeType || inline.mime_type || 'image/png') + ';base64,' + inline.data });
   } catch (e) {
     return res.status(500).json({ error: String(e) });
