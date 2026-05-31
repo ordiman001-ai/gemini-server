@@ -1,9 +1,9 @@
-const MODEL = 'gemini-2.5-flash';
+const MODEL = 'google/gemini-3.1-flash-lite';
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
@@ -12,28 +12,49 @@ module.exports = async (req, res) => {
     const KEY = process.env.GEMINI_API_KEY;
     if (!KEY) return res.status(200).json({ reply: 'На сервере не задан GEMINI_API_KEY. Проверь Environment Variables на Vercel и сделай Redeploy.', newTasks: [] });
 
-    const body = {
-      system_instruction: { parts: [{ text: system }] },
-      contents: contents,
-      generationConfig: { temperature: 0.9 }
-    };
-    if (wantJson) body.generationConfig.responseMimeType = 'application/json';
+    // Преобразуем формат данных под стандарт OpenAI, который использует прокси Polza
+    const messages = [];
+    if (system) {
+      messages.push({ role: 'system', content: system });
+    }
+    
+    if (contents && Array.isArray(contents)) {
+      contents.forEach(msg => {
+        const text = msg.parts && msg.parts[0] ? msg.parts[0].text : '';
+        messages.push({ role: msg.role === 'model' ? 'assistant' : 'user', content: text });
+      });
+    }
 
-    const r = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/' + MODEL + ':generateContent?key=' + KEY,
-      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-    );
+    const body = {
+      model: MODEL,
+      messages: messages,
+      temperature: 0.9
+    };
+
+    if (wantJson) body.response_format = { type: "json_object" };
+
+    // Стучимся на эндпоинт Polza AI
+    const r = await fetch('https://api.polza.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${KEY}`
+      },
+      body: JSON.stringify(body)
+    });
+    
     const data = await r.json();
 
     if (data.error) {
-      return res.status(200).json({ reply: 'Ошибка Gemini: ' + (data.error.message || JSON.stringify(data.error)), newTasks: [] });
+      return res.status(200).json({ reply: 'Ошибка API: ' + (data.error.message || JSON.stringify(data.error)), newTasks: [] });
     }
 
-    let parts = (((data.candidates || [])[0] || {}).content || {}).parts;
-    let raw = parts && parts[0] ? parts[0].text : '';
-    if (!raw) return res.status(200).json({ reply: 'Пустой ответ. Сырой ответ Google: ' + JSON.stringify(data).slice(0, 300), newTasks: [] });
+    // Достаем ответ в новом формате
+    let raw = data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : '';
+    if (!raw) return res.status(200).json({ reply: 'Пустой ответ от прокси: ' + JSON.stringify(data).slice(0, 300), newTasks: [] });
 
     if (!wantJson) return res.status(200).json({ reply: raw, newTasks: [] });
+    
     raw = raw.replace(/```json|```/g, '').trim();
     try {
       const p = JSON.parse(raw);
