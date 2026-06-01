@@ -506,7 +506,7 @@ function defaultState(){
   memory:[],          // короткая память (последние факты)
   journal:[],         // долговременный дневник ВАЖНЫХ событий (хранится навсегда)
   view:'home', completedCount:0,
-  iqBest:null, datesCount:0, interviewsCount:0, mathBest:0, storyBeats:[],
+  iqBest:null, datesCount:0, interviewsCount:0, mathBest:0, storyBeats:[], teasers:{},
   xp:0, streak:0, lastActiveDate:'', freezeTokens:0, lastChestDate:'', lastMorningImg:'', workoutCount:0, imgDay:'', imgCount:0, unlockedFeatures:{},
   mood:{date:'',val:0}, intention:{date:'',text:''},
  };
@@ -883,7 +883,7 @@ function completeTask(id){
  // Это не слежка, а лёгкое трение: бездумно «накликать» становится неинтересно,
  // а честный ответ обогащает контекст тренера и усиливает ощущение прогресса.
  pendingTask=id;
- const ask=Math.random()<0.5; // в половине случаев просим короткую рефлексию
+ const ask=Math.random()<0.25; // реже — примерно каждый 4-й раз
  const qs={ru:['Как прошло? Одним словом или фразой:','Что было самым трудным?','Что почувствовал(а) после?','Оцени от 1 до 5, как зашло:'],
            en:['How did it go? A word or phrase:','What was the hardest part?','How did you feel after?','Rate 1–5 how it went:'],
            zh:['完成得怎样？一句话：','最难的部分是什么？','完成后感觉如何？','给它打个1–5分：']};
@@ -908,14 +908,33 @@ function confirmTask(id,reflection){
  if(reflection)tk.reflection=reflection;
  state.archive.push(tk);
  const gain=5+Math.floor(Math.random()*6);addPoints(gain);state.completedCount++;
- if(reflection)remember(`Выполнил задачу «${tk.name}». Заметка: ${reflection}`);
+ if(reflection){
+  remember(`Выполнил задачу «${tk.name}». Заметка: ${reflection}`);
+  // показываем ответ пользователя в чате и просим тренера дать обратную связь
+  state.chat.push({role:'user',text:`✅ ${tr(tk.name)}: ${reflection}`});
+  coachFeedback(tk,reflection);
+ }
  maybeReward('task');
  save();render();
  if(state.unlocked.rock&&state.completedCount%5===0)rockAnalysisLetter();
  if(state.completedCount%10===0)coachImageMoment('tasks');
  if(state.completedCount%7===0)coachVideoMoment();
  maybeStoryBeat();
+ coachTeaser();
  checkUnlocks();
+}
+/* Тренер даёт живую обратную связь на рассказ о выполнении задачи */
+async function coachFeedback(tk,reflection){
+ if(!state.apiKey&&!state.proxyUrl)return;
+ const coach=state.coach;
+ aiPending=true;if(state.view==='chat')$('typing')?.classList.remove('hidden');
+ try{
+  const sys=buildSystem(COACHES[coach])+`\nСЕЙЧАС: пользователь выполнил задачу «${tk.name}» и поделился: "${reflection}". Дай короткую живую обратную связь в своём стиле — отметь усилие, поддержи или мягко направь. 1-2 предложения, без новых задач. ОТВЕЧАЙ НА ЯЗЫКЕ: ${aiLang()}.`;
+  const ans=await callGemini(sys,[{role:'user',parts:[{text:reflection}]}],false);
+  state.chat.push({role:'coach',coach,text:ans.reply});
+  save();if(state.view==='chat')renderChat();
+ }catch(e){}
+ finally{aiPending=false;$('typing')?.classList.add('hidden');}
 }
 
 /* ============================================================ ПРОГРЕСС */
@@ -1597,6 +1616,7 @@ function renderSettings(){
   <div class="card p-5"><h2 class="font-extrabold mb-1">${t('aiCoach')}</h2><p class="text-sm" style="color:${(state.apiKey||state.proxyUrl)?'var(--mint)':'var(--coral)'}">${(state.apiKey||state.proxyUrl)?t('aiOn'):t('aiOff')}</p>
    <label class="flex items-center gap-2 mt-3 text-sm cursor-pointer"><input type="checkbox" ${state.allowImages?'checked':''} onchange="toggleImages(this.checked)" style="width:18px;height:18px;accent-color:var(--indigo)"> ${t('allowImg')}</label></div>
   <div class="card p-5"><h2 class="font-extrabold mb-1">${t('profileTest')}</h2>${Object.entries(state.scores).map(([k,v])=>`<div class="flex justify-between py-1 text-sm" style="border-bottom:1px solid var(--line)"><span>${esc(tSphere(k))}</span><b style="color:var(--indigo)">${v} / 4</b></div>`).join('')}<button class="btn btn-ghost w-full py-3 mt-4" onclick="retakeTest()">${t('retake')}</button></div>
+  <div class="card p-5"><h2 class="font-extrabold mb-1">🛠 ${({ru:'Режим разработчика',en:'Developer mode',zh:'开发者模式'})[state.lang||'ru']}</h2><p class="text-sm mb-3" style="color:var(--muted)">${({ru:'Открыть все разделы, тренеров и +500 очков — для проверки функций без прохождения заданий.',en:'Unlock all sections, coaches and +500 points — to test features without doing tasks.',zh:'解锁所有板块、教练并+500积分——无需完成任务即可测试功能。'})[state.lang||'ru']}</p><button class="btn btn-primary px-4 py-3 text-sm" onclick="devUnlockAll()">${({ru:'Открыть всё (dev)',en:'Unlock all (dev)',zh:'全部解锁（dev）'})[state.lang||'ru']}</button></div>
   <div class="card p-5"><h2 class="font-extrabold mb-1" style="color:var(--coral)">${t('resetT')}</h2><p class="text-sm mb-3" style="color:var(--muted)">${t('resetSub')}</p><button class="btn px-4 py-3 text-sm" style="background:#ffeceb;color:var(--coral)" onclick="hardReset()">${t('delAll')}</button></div></div>`;
 }
 function selectCoachSetting(k){state.coach=k;save();renderSettings();renderNav();}
@@ -1619,6 +1639,35 @@ function unlockSteel(){
  save();render();
 }
 function retakeTest(){if(!confirm('OK?'))return;state.onboarded=false;testDraft=null;remember('Пользователь проходит тест заново.');save();render();}
+/* Запертый тренер заранее «подогревает» интерес — пишет интригующее сообщение в своём стиле */
+async function coachTeaser(){
+ if(!state.apiKey&&!state.proxyUrl)return;
+ if(!state.teasers)state.teasers={};
+ const done=state.completedCount;
+ // за сколько заданий до открытия слать тизер
+ const teaseMap={johnny:3,silas:12,steel:36}; // тренер: на каком completedCount подогреть
+ for(const [coachKey,at] of Object.entries(teaseMap)){
+  if(done===at && !state.teasers[coachKey] && !isUnlocked(coachKey==='steel'?'steelfeat':coachKey)){
+   state.teasers[coachKey]=true;save();
+   try{
+    const sys=`${COACHES[coachKey].persona}\nСЕЙЧАС: ты ещё «в тени» — пользователь почти дорос до знакомства с тобой. Напиши ОДНО короткое интригующее сообщение от первого лица в своём характере: намекни, кто ты, заинтересуй своей личностью и подтолкни продолжать («скоро увидимся», «дальше будет интереснее»). 2-3 предложения. БЕЗ заданий. ОТВЕЧАЙ НА ЯЗЫКЕ: ${aiLang()}.`;
+    const ans=await callGemini(sys,[{role:'user',parts:[{text:'teaser'}]}],false);
+    state.chat.push({role:'coach',coach:coachKey,text:'👀 '+ans.reply});
+    save();if(state.view==='chat')renderChat();
+   }catch(e){}
+   break;
+  }
+ }
+}
+function devUnlockAll(){
+ if(!state.unlockedFeatures)state.unlockedFeatures={};
+ UNLOCKS.forEach(u=>{state.unlockedFeatures[u.key]=true;});
+ state.unlocked.rock=true;state.unlocked.steel=true;
+ state.completedCount=Math.max(state.completedCount,45);
+ addPoints(500);
+ save();render();
+ modal('🛠','Всё открыто. +500 ✨. Можешь проверять все функции.');
+}
 function hardReset(){if(!confirm('OK?'))return;localStorage.removeItem(STORE_KEY);state=defaultState();save();render();}
 
 /* Утренняя мотивация: раз в день утром тренер пишет в чат и шлёт картинку дня */
@@ -1644,7 +1693,7 @@ load();
 loadVideos();
 if(state.onboarded){touchStreak();checkUnlocks();morningMotivation();}
 render();
-Object.assign(window,{navigate,closeModal,testNext,pickAnswer,finishTest,completeTask,toggleHabit,addHabit,removeHabit,advanceChallenge,completeSleep,sendChat,switchCoach,askImage,selectCoachSetting,saveApiKey,saveProxy,toggleImages,unlockRock,retakeTest,hardReset,startDate,finishDate,startIQ,answerIQ,startInterview,finishInterview,actSend,claimChest,setMood,saveIntention,startWorkout,workoutNext,workoutSkip,setLang,startGratitude,startVisualize,finishSession,startMeditation,speakMsg,stopSpeak,beginWorkout,wkStartTimer,wkStopTimer,beginMeditation,medPlay,medStop,medFinish,confirmTask,unlockSteel,sendPhotoReport,startMath,mathAns});
+Object.assign(window,{navigate,closeModal,testNext,pickAnswer,finishTest,completeTask,toggleHabit,addHabit,removeHabit,advanceChallenge,completeSleep,sendChat,switchCoach,askImage,selectCoachSetting,saveApiKey,saveProxy,toggleImages,unlockRock,retakeTest,hardReset,startDate,finishDate,startIQ,answerIQ,startInterview,finishInterview,actSend,claimChest,setMood,saveIntention,startWorkout,workoutNext,workoutSkip,setLang,startGratitude,startVisualize,finishSession,startMeditation,speakMsg,stopSpeak,beginWorkout,wkStartTimer,wkStopTimer,beginMeditation,medPlay,medStop,medFinish,confirmTask,unlockSteel,sendPhotoReport,startMath,mathAns,devUnlockAll});
 </script>
 </body>
 </html>
