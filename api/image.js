@@ -33,13 +33,11 @@ module.exports = async (req, res) => {
     
     const H = {'Content-Type':'application/json','Authorization':'Bearer '+KEY};
 
-    // ЖЕСТКО ЗАДАЕМ МОДЕЛЬ И ВСЕ ЕЕ ПАРАМЕТРЫ ЗДЕСЬ:
     const reqBody = { 
       model: 'tongyi-mai/z-image', 
       prompt: 'Motivational illustration, no text: ' + prompt, 
       n: 1,
-      size: '1024x1024',
-      aspect_ratio: '1:1' // Тот самый параметр, из-за которого была ошибка
+      aspect_ratio: '1:1' // Убрали size, теперь только этот параметр
     };
 
     const r = await fetch(BASE_URL+'/images/generations', {
@@ -53,14 +51,16 @@ module.exports = async (req, res) => {
     try {
         first = JSON.parse(textResponse);
     } catch(e) {
-        return res.status(200).json({error: 'Сбой API Polza (не JSON): ' + textResponse.slice(0, 250)});
+        return res.status(200).json({error: 'Сбой API (не JSON): ' + textResponse.slice(0, 250)});
     }
 
     let img = extractImage(first);
     if(img) return res.status(200).json({image:img});
 
     const id = first.id || first.requestId || first.taskId;
-    if(!id) return res.status(200).json({error:'ДИАГНОЗ-1 (нет id): '+JSON.stringify(first).slice(0,700)});
+    
+    // МЕНЯЕМ ТЕКСТ ОШИБКИ ДЛЯ ПРОВЕРКИ
+    if(!id) return res.status(200).json({error:'ВЕРСИЯ-5 (нет id): '+JSON.stringify(first).slice(0,700)});
 
     for(let i=0;i<14;i++){
       await sleep(2000);
@@ -69,13 +69,13 @@ module.exports = async (req, res) => {
       img = extractImage(pd);
       if(img) return res.status(200).json({image:img});
       if(pd.status==='failed' || pd.status==='error'){
-        return res.status(200).json({error:'ДИАГНОЗ-2 (ошибка генерации): '+JSON.stringify(pd).slice(0,700)});
+        return res.status(200).json({error:'ВЕРСИЯ-5 (ошибка генерации): '+JSON.stringify(pd).slice(0,700)});
       }
       if(i===13){
-        return res.status(200).json({error:'ДИАГНОЗ-3 (таймаут ожидания): '+JSON.stringify(pd).slice(0,700)});
+        return res.status(200).json({error:'ВЕРСИЯ-5 (таймаут ожидания): '+JSON.stringify(pd).slice(0,700)});
       }
     }
   } catch(e) {
-    return res.status(200).json({error:'ДИАГНОЗ-4 (сбой кода Vercel): '+String(e)});
+    return res.status(200).json({error:'ВЕРСИЯ-5 (сбой кода): '+String(e)});
   }
 };
