@@ -21,40 +21,33 @@ module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin','*');
   res.setHeader('Access-Control-Allow-Methods','POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers','Content-Type');
-  if(req.method==='OPTIONS') return res.status(200).end();
   
-  // Отдаем 200 статус даже при ошибках маршрута, чтобы фронтенд мог прочитать текст
+  if(req.method==='OPTIONS') return res.status(200).end();
   if(req.method!=='POST') return res.status(200).json({error:'Только POST запросы'});
 
   try {
-    const { prompt, model } = req.body;
+    const { prompt } = req.body;
     const KEY = process.env.POLZA_API_KEY;
+    
     if(!KEY) return res.status(200).json({error:'Нет POLZA_API_KEY в настройках Vercel'});
     
-    const targetModel = 'tongyi-mai/z-image';
     const H = {'Content-Type':'application/json','Authorization':'Bearer '+KEY};
 
-    // 1. Собираем базовое тело запроса
+    // ЖЕСТКО ЗАДАЕМ МОДЕЛЬ И ВСЕ ЕЕ ПАРАМЕТРЫ ЗДЕСЬ:
     const reqBody = { 
-      model: targetModel, 
+      model: 'tongyi-mai/z-image', 
       prompt: 'Motivational illustration, no text: ' + prompt, 
-      n: 1 
+      n: 1,
+      size: '1024x1024',
+      aspect_ratio: '1:1' // Тот самый параметр, из-за которого была ошибка
     };
-    
-    // 2. Умное распределение параметров:
-    // Если это проблемная модель tongyi, ставим aspect_ratio. Если другая — size.
-    if(targetModel === 'tongyi-mai/z-image') {
-        reqBody.aspect_ratio = '1:1';
-    } else {
-        reqBody.size = '1024x1024';
-    }
 
     const r = await fetch(BASE_URL+'/images/generations', {
-      method:'POST', headers:H,
+      method:'POST', 
+      headers:H,
       body: JSON.stringify(reqBody)
     });
     
-    // 3. Безопасный парсинг ответа (на случай если Polza AI упала и вернула HTML)
     const textResponse = await r.text();
     let first;
     try {
@@ -83,7 +76,6 @@ module.exports = async (req, res) => {
       }
     }
   } catch(e) {
-    // ВАЖНО: Возвращаем статус 200, чтобы фронтенд не паниковал и вывел текст исключения в чат
     return res.status(200).json({error:'ДИАГНОЗ-4 (сбой кода Vercel): '+String(e)});
   }
 };
