@@ -1,5 +1,5 @@
 const BASE_URL  = 'https://api.polza.ai/v1';
-const IMG_MODEL = 'qwen/image';
+const IMG_MODEL = 'tongyi-mai/z-image';
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 function extractImage(obj){
