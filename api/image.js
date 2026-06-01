@@ -34,7 +34,7 @@ module.exports = async (req, res) => {
     const H = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + KEY };
 
     // 1) создаём заявку на генерацию
-    const r = await fetch(BASE_URL.replace(/\/$/, '') + '/media/generations', {
+    const r = await fetch(BASE_URL.replace(/\/$/, '') + '/media', {
       method: 'POST', headers: H,
       body: JSON.stringify({
         model: IMG_MODEL,
