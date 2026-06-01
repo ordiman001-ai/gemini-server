@@ -31,7 +31,7 @@ module.exports = async (req, res) => {
     if(!KEY) return res.status(200).json({error:'нет POLZA_API_KEY'});
     const H = {'Content-Type':'application/json','Authorization':'Bearer '+KEY};
 
-    const r = await fetch(BASE_URL+'/media',{
+    const r = await fetch(BASE_URL+'/images/generations',{
       method:'POST', headers:H,
       body:JSON.stringify({ model:IMG_MODEL, prompt:'Motivational illustration, no text: '+prompt, n:1, size:'1024x1024' })
     });
