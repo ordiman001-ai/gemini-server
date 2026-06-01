@@ -43,6 +43,7 @@ module.exports = async (req, res) => {
       })
     });
     const first = await r.json();
+    console.log('FIRST:', JSON.stringify(first));
     if (first.error) return res.status(200).json({ error: (first.error.message || JSON.stringify(first.error)) });
 
     // если картинка пришла сразу — отдаём
@@ -57,11 +58,14 @@ module.exports = async (req, res) => {
       await sleep(2000);
       const pr = await fetch(BASE_URL.replace(/\/$/, '') + '/media/' + id, { headers: H });
       const pd = await pr.json();
-      if (pd.status === 'failed' || (pd.error && pd.status !== 'pending')) {
-        return res.status(200).json({ error: 'генерация не удалась: ' + JSON.stringify(pd.error || pd).slice(0, 300) });
-      }
       img = extractImage(pd);
       if (img) return res.status(200).json({ image: img });
+      if (pd.status === 'failed' || pd.status === 'error') {
+        return res.status(200).json({ error: 'СТАТУС: ' + JSON.stringify(pd).slice(0, 600) });
+      }
+      if (i === 13) {
+        return res.status(200).json({ error: 'ПОСЛЕДНИЙ ОТВЕТ POLZA: ' + JSON.stringify(pd).slice(0, 600) });
+      }
     }
     return res.status(200).json({ error: 'картинка не готова за отведённое время, попробуй ещё раз' });
   } catch (e) {
