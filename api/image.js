@@ -31,7 +31,7 @@ module.exports = async (req, res) => {
     const KEY = process.env.POLZA_API_KEY;
     if(!KEY) return res.status(200).json({error:'Нет POLZA_API_KEY в настройках Vercel'});
     
-    const targetModel = model || process.env.IMAGE_MODEL || 'qwen/image';
+    const targetModel = 'tongyi-mai/z-image';
     const H = {'Content-Type':'application/json','Authorization':'Bearer '+KEY};
 
     // 1. Собираем базовое тело запроса
