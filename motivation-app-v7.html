@@ -501,7 +501,7 @@ function defaultState(){
   memory:[],          // долговременные факты (свидания, IQ, собес)
   view:'home', completedCount:0,
   iqBest:null, datesCount:0, interviewsCount:0,
-  xp:0, streak:0, lastActiveDate:'', freezeTokens:0, lastChestDate:'', lastMorningImg:'', workoutCount:0,
+  xp:0, streak:0, lastActiveDate:'', freezeTokens:0, lastChestDate:'', lastMorningImg:'', workoutCount:0, imgDay:'', imgCount:0, unlockedFeatures:{},
   mood:{date:'',val:0}, intention:{date:'',text:''},
  };
 }
@@ -570,6 +570,78 @@ function levelInfo(){
  return{lvl,title,xp,cur,next,pct};
 }
 function isFreshStart(){const d=new Date();return d.getDay()===1||d.getDate()===1;}
+
+/* ============================================================
+   ПРОГРЕССИВНОЕ ОТКРЫТИЕ: путь пользователя
+   В начале доступно немногое; новые разделы открываются по мере роста.
+   Условие — по выполненным заданиям (надёжнее уровня, понятно пользователю). ============================================================ */
+const UNLOCKS=[
+ {key:'chat',     need:0,  emoji:'💬', n:{ru:'Чат с Авророй',en:'Chat with Aurora',zh:'与 Aurora 聊天'}},
+ {key:'tasks',    need:0,  emoji:'📋', n:{ru:'Задания',en:'Tasks',zh:'任务'}},
+ {key:'progress', need:3,  emoji:'📈', n:{ru:'Трекер привычек',en:'Habit tracker',zh:'习惯打卡'}},
+ {key:'johnny',   need:5,  emoji:'💪', n:{ru:'Тренер Джони',en:'Coach Johnny',zh:'教练 Johnny'}},
+ {key:'challenges',need:8, emoji:'🔥', n:{ru:'Челленджи',en:'Challenges',zh:'挑战'}},
+ {key:'activities',need:12,emoji:'🎮', n:{ru:'Активности',en:'Activities',zh:'活动'}},
+ {key:'silas',    need:15, emoji:'🦉', n:{ru:'Тренер Сайлас',en:'Coach Silas',zh:'教练 Silas'}},
+ {key:'sleep',    need:20, emoji:'🌙', n:{ru:'План сна',en:'Sleep plan',zh:'睡眠计划'}},
+ {key:'video',    need:25, emoji:'🎬', n:{ru:'Видео-мотивация',en:'Video motivation',zh:'视频激励'}},
+ {key:'rockfeat', need:30, emoji:'🪨', n:{ru:'Скала и тренировки',en:'Skala & workouts',zh:'Skala 与训练'}},
+];
+function isUnlocked(key){
+ if(!state.unlockedFeatures)state.unlockedFeatures={};
+ // базовые всегда открыты
+ if(key==='home'||key==='settings'||key==='chat'||key==='tasks')return true;
+ return !!state.unlockedFeatures[key];
+}
+function checkUnlocks(){
+ if(!state.unlockedFeatures)state.unlockedFeatures={};
+ const done=state.completedCount;
+ const newly=[];
+ UNLOCKS.forEach(u=>{
+  if(done>=u.need && !state.unlockedFeatures[u.key]){
+   state.unlockedFeatures[u.key]=true;newly.push(u);
+  }
+ });
+ if(newly.length){
+  save();
+  const l=state.lang||'ru';
+  const items=newly.map(u=>`${u.emoji} ${u.n[l]}`).join('\n');
+  const ttl={ru:'🎉 Новое открыто!',en:'🎉 Unlocked!',zh:'🎉 已解锁！'}[l];
+  const sub={ru:'Ты открыл(а):',en:'You unlocked:',zh:'你解锁了：'}[l];
+  modal(ttl,sub+'\n\n'+items);
+  // если открылся тренер — дать ему поздороваться
+  newly.forEach(u=>{if(['johnny','silas'].includes(u.key)){state.chat.push({role:'coach',coach:u.key,text:greeting(u.key)});}});
+  if(newly.some(u=>u.key==='rockfeat')){state.unlocked.rock=false;/* Скалу всё равно надо купить за баллы, но активность видна */}
+  save();
+ }
+ return newly;
+}
+function nextUnlock(){
+ const done=state.completedCount;
+ return UNLOCKS.find(u=>u.need>done&&!isUnlocked(u.key));
+}
+
+/* ============================================================
+   ВИДЕО-МОТИВАЦИЯ — список берётся из отдельного файла videos.json на сервере.
+   Чтобы добавить видео, правишь ТОЛЬКО videos.json, приложение трогать не нужно. ============================================================ */
+let VIDEO_LIB=[];
+async function loadVideos(){
+ try{
+  const base=(state.proxyUrl||'').replace(/\/api\/?$/,'');  // адрес сайта без /api
+  const r=await fetch(base+'/videos.json',{cache:'no-store'});
+  if(r.ok){const d=await r.json();if(Array.isArray(d))VIDEO_LIB=d;}
+ }catch(e){/* нет файла — видео просто не будет */}
+}
+function coachVideoMoment(){
+ if(!isUnlocked('video'))return;
+ const pool=VIDEO_LIB.filter(v=>v.url&&(v.coach===state.coach||!v.coach));
+ if(!pool.length)return;
+ const v=pool[Math.floor(Math.random()*pool.length)];
+ const l=state.lang||'ru';
+ const title=(v.title&&(v.title[l]||v.title.ru))||'🎬';
+ state.chat.push({role:'coach',coach:v.coach||state.coach,text:'🎬 '+title,video:v.url});
+ save();if(state.view==='chat')renderChat();
+}
 function remember(fact){state.memory.push(fact);if(state.memory.length>20)state.memory=state.memory.slice(-20);}
 function timeContext(){
  const d=new Date(),h=d.getHours();
@@ -663,8 +735,10 @@ function generateStarterTasks(scores){
    КАРКАС
    ============================================================ */
 const NAV=['home','tasks','progress','challenges','sleep','chat','activities','settings'];
+const NAV_UNLOCK={progress:'progress',challenges:'challenges',sleep:'sleep',activities:'activities'};
 function renderNav(){
- $('navWrap').innerHTML=NAV.map(v=>`<button class="nav-item btn ${state.view===v?'active':'btn-ghost'} text-sm px-4 py-2" onclick="navigate('${v}')">${t('nav_'+v)}</button>`).join('');
+ const visible=NAV.filter(v=>{const k=NAV_UNLOCK[v];return !k||isUnlocked(k);});
+ $('navWrap').innerHTML=visible.map(v=>`<button class="nav-item btn ${state.view===v?'active':'btn-ghost'} text-sm px-4 py-2" onclick="navigate('${v}')">${t('nav_'+v)}</button>`).join('');
  $('coachBadge').textContent=`${COACHES[state.coach].emoji} ${COACHES[state.coach].name}`;
  $('pointsBadge').textContent=state.points;
 }
@@ -675,6 +749,26 @@ function render(){
 }
 
 /* ============================================================ ГЛАВНАЯ */
+function journeyHtml(){
+ const nu=nextUnlock();const l=state.lang||'ru';const done=state.completedCount;
+ if(!nu){
+  return `<div class="card p-5 mb-4" style="background:linear-gradient(135deg,#16b87f,#0ea5e9);color:#fff;border:none"><div class="font-extrabold">🏆 ${({ru:'Всё открыто!',en:'Everything unlocked!',zh:'全部已解锁！'})[l]}</div><div class="text-sm opacity-90">${({ru:'Ты прошёл весь путь функций. Теперь — только вперёд к вершине!',en:'You unlocked the whole path. Now — onward to the top!',zh:'你已解锁全部功能。现在——勇攀高峰！'})[l]}</div></div>`;
+ }
+ const left=nu.need-done;
+ const prevNeed=(()=>{let p=0;for(const u of UNLOCKS){if(u.key===nu.key)break;p=u.need;}return p;})();
+ const span=Math.max(1,nu.need-prevNeed);const pct=Math.min(100,Math.round((done-prevNeed)/span*100));
+ const title={ru:'Твой путь',en:'Your journey',zh:'你的旅程'}[l];
+ const next={ru:'Следующее открытие',en:'Next unlock',zh:'下一个解锁'}[l];
+ const tasksLeft={ru:`ещё ${left} ${left===1?'задание':'заданий'}`,en:`${left} more task${left===1?'':'s'}`,zh:`还差 ${left} 个任务`}[l];
+ return `<div class="card p-5 mb-4">
+  <div class="flex items-center justify-between mb-2"><h2 class="text-lg font-extrabold">${title}</h2><span class="pill btn-ghost">${done} ✓</span></div>
+  <div class="flex items-center gap-3">
+   <div class="text-3xl" style="filter:grayscale(1);opacity:.5">${nu.emoji}</div>
+   <div class="flex-1"><div class="text-sm font-bold">${next}: ${nu.n[l]} 🔒</div>
+    <div style="height:10px;background:#eef0ff;border-radius:8px;margin-top:6px;overflow:hidden"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#4f46e5,#16b87f);transition:.5s"></div></div>
+    <div class="text-xs mt-1" style="color:var(--muted)">${tasksLeft}</div></div>
+  </div></div>`;
+}
 function renderHome(){
  const doneTasks=state.archive.length,totalTasks=state.tasks.length+state.archive.length;
  const taskPct=totalTasks?Math.round(doneTasks/totalTasks*100):0;
@@ -688,6 +782,7 @@ function renderHome(){
    <div class="mt-4 flex items-end gap-2"><div class="display text-5xl font-extrabold">${state.points}</div><div class="mb-1 opacity-90">${t('points')}</div></div>
    <div class="text-xs opacity-80 mt-1">${t('now')} ${tc}. ${t('spendHint')}</div></div>
   ${dailyBlocksHtml()}
+  ${journeyHtml()}
   <div class="grid grid-cols-3 gap-3 mb-4">
    ${statCard(t('s_tasks'),doneTasks+' / '+totalTasks,taskPct+t('done_pct'))}
    ${statCard(t('s_challenges'),chDone+' / '+state.challenges.length,t('done_word'))}
@@ -747,12 +842,43 @@ function renderTasks(){
 function taskCard(tk,done){return`<div class="card p-4 flex items-start gap-3" style="border-left:4px solid ${done?'var(--mint)':'var(--indigo)'}"><div class="flex-1"><div class="font-extrabold ${done?'line-through opacity-60':''}">${esc(tr(tk.name))} <span class="pill" style="background:var(--indigo-soft);color:var(--indigo);margin-left:6px">${esc(tSphere(tk.sphere))}</span>${tk.byCoach?`<span class="pill" style="background:#fff3e8;color:#b45309;margin-left:4px">${t('fromCoach')}</span>`:''}</div><div class="text-sm mt-1" style="color:var(--muted)">${esc(tr(tk.desc))}</div><div class="text-xs mt-2" style="color:var(--mint)">🔥 ${esc(tr(tk.benefit))}</div></div>${done?`<div class="text-2xl">✅</div>`:`<button class="btn btn-mint px-3 py-2 text-sm" onclick="completeTask('${tk.id}')">${t('ready')}</button>`}</div>`;}
 function completeTask(id){
  const i=state.tasks.findIndex(x=>x.id===id);if(i<0)return;
- const[tk]=state.tasks.splice(i,1);state.archive.push(tk);
+ const tk=state.tasks[i];
+ // Анти-читинг по дизайну: подтверждение + случайная микро-рефлексия.
+ // Это не слежка, а лёгкое трение: бездумно «накликать» становится неинтересно,
+ // а честный ответ обогащает контекст тренера и усиливает ощущение прогресса.
+ pendingTask=id;
+ const ask=Math.random()<0.5; // в половине случаев просим короткую рефлексию
+ const qs={ru:['Как прошло? Одним словом или фразой:','Что было самым трудным?','Что почувствовал(а) после?','Оцени от 1 до 5, как зашло:'],
+           en:['How did it go? A word or phrase:','What was the hardest part?','How did you feel after?','Rate 1–5 how it went:'],
+           zh:['完成得怎样？一句话：','最难的部分是什么？','完成后感觉如何？','给它打个1–5分：']};
+ const ql=qs[state.lang||'ru'];const q=ql[Math.floor(Math.random()*ql.length)];
+ if(ask){
+  $('modalTitle').textContent='✅ '+tr(tk.name);
+  $('modalMsg').innerHTML=`<div class="text-sm mb-3">${esc(q)}</div><input id="reflectInput" class="w-full px-4 py-3 rounded-xl text-sm" style="border:1px solid var(--line)" placeholder="...">`;
+  const m=$('modal');m.classList.remove('hidden');
+  // подменяем кнопку «Понятно» на «Готово»
+  const btn=m.querySelector('button');btn.textContent=t('ready');btn.onclick=()=>{const v=$('reflectInput')?$('reflectInput').value.trim():'';confirmTask(id,v);};
+ }else{
+  confirmTask(id,'');
+ }
+}
+let pendingTask=null;
+function confirmTask(id,reflection){
+ closeModal();
+ // восстановим обработчик кнопки модалки
+ const m=$('modal');const btn=m.querySelector('button');btn.textContent=t('understood');btn.onclick=closeModal;
+ const i=state.tasks.findIndex(x=>x.id===id);if(i<0)return;
+ const[tk]=state.tasks.splice(i,1);
+ if(reflection)tk.reflection=reflection;
+ state.archive.push(tk);
  const gain=5+Math.floor(Math.random()*6);addPoints(gain);state.completedCount++;
+ if(reflection)remember(`Выполнил задачу «${tk.name}». Заметка: ${reflection}`);
  maybeReward('task');
- save();render();modal('+'+gain+t('taskDone'),t('taskDoneMsg1')+tr(tk.name)+t('taskDoneMsg2'));
+ save();render();
  if(state.unlocked.rock&&state.completedCount%5===0)rockAnalysisLetter();
- if(state.completedCount%3===0)coachImageMoment('tasks');
+ if(state.completedCount%10===0)coachImageMoment('tasks');
+ if(state.completedCount%7===0)coachVideoMoment();
+ checkUnlocks();
 }
 
 /* ============================================================ ПРОГРЕСС */
@@ -805,9 +931,15 @@ function renderChat(){
   if(m.role==='user')return`<div class="flex justify-end mb-3"><div class="px-4 py-3 rounded-2xl rounded-br-md max-w-[80%] text-sm" style="background:var(--indigo);color:#fff">${esc(m.text)}</div></div>`;
   const cc=COACHES[m.coach]||c;
   const imgHtml=m.img?`<img src="${m.img}" style="max-width:240px;border-radius:14px;margin-top:8px;display:block">`:'';
-  return`<div class="flex justify-start mb-3 gap-2"><div class="text-xl">${cc.emoji}</div><div class="px-4 py-3 rounded-2xl rounded-bl-md max-w-[80%] text-sm" style="background:#fff;border:1px solid var(--line)"><b style="color:${cc.color}">${cc.name}</b> <button onclick="speakMsg(${mi})" title="🔊" style="border:none;background:none;cursor:pointer;font-size:13px;opacity:.6">🔊</button><br>${esc(m.text).replace(/\n/g,'<br>')}${imgHtml}</div></div>`;
+  const vidHtml=m.video?`<video src="${m.video}" controls playsinline style="max-width:260px;border-radius:14px;margin-top:8px;display:block"></video>`:'';
+  return`<div class="flex justify-start mb-3 gap-2"><div class="text-xl">${cc.emoji}</div><div class="px-4 py-3 rounded-2xl rounded-bl-md max-w-[80%] text-sm" style="background:#fff;border:1px solid var(--line)"><b style="color:${cc.color}">${cc.name}</b> <button onclick="speakMsg(${mi})" title="🔊" style="border:none;background:none;cursor:pointer;font-size:13px;opacity:.6">🔊</button><br>${esc(m.text).replace(/\n/g,'<br>')}${imgHtml}${vidHtml}</div></div>`;
  }).join('');
- const switcher=Object.entries(COACHES).map(([k,co])=>{const locked=co.locked&&!state.unlocked[k];return`<button onclick="${locked?`modal('🔒','${t('need')} ${ROCK_PRICE} ✨')`:`switchCoach('${k}')`}" class="btn text-sm px-3 py-2 ${state.coach===k?'btn-primary':'btn-ghost'}" ${locked?'style="opacity:.55"':''}>${co.emoji} ${co.name}${locked?' 🔒':''}</button>`;}).join('');
+ const switcher=Object.entries(COACHES).map(([k,co])=>{
+   let locked=false, lockMsg='';
+   if(k==='johnny'&&!isUnlocked('johnny')){locked=true;lockMsg={ru:'Откроется после 5 заданий',en:'Unlocks after 5 tasks',zh:'完成5个任务后解锁'}[state.lang||'ru'];}
+   else if(k==='silas'&&!isUnlocked('silas')){locked=true;lockMsg={ru:'Откроется после 15 заданий',en:'Unlocks after 15 tasks',zh:'完成15个任务后解锁'}[state.lang||'ru'];}
+   else if(k==='rock'&&co.locked&&!state.unlocked[k]){locked=true;lockMsg=t('need')+' '+ROCK_PRICE+' ✨';}
+   return`<button onclick="${locked?`modal('🔒','${lockMsg}')`:`switchCoach('${k}')`}" class="btn text-sm px-3 py-2 ${state.coach===k?'btn-primary':'btn-ghost'}" ${locked?'style="opacity:.55"':''}>${co.emoji} ${co.name}${locked?' 🔒':''}</button>`;}).join('');
  $('app').innerHTML=`<div class="fade"><div class="card p-4 mb-3" style="background:${c.color}18;border-color:${c.color}55"><div class="font-extrabold" style="color:${c.color}">${c.emoji} ${t('unifiedChat')} ${c.name}</div><div class="text-sm" style="color:var(--muted)">${t('chatSub')}</div></div><div class="scroll-x mb-3"><div class="flex gap-2">${switcher}</div></div><div class="card p-4"><div id="chatbox" class="chatbox" style="height:46vh;min-height:300px;overflow-y:auto;padding-right:4px">${msgs}</div><div id="typing" class="${aiPending?'':'hidden'} text-sm px-2 mt-1" style="color:var(--muted)">${c.name} ${t('typing')} <span class="dots"><span></span><span></span><span></span></span></div><div class="flex gap-2 mt-3"><input id="chatInput" class="flex-1 px-4 py-3 rounded-xl text-sm" style="border:1px solid var(--line)" placeholder="${t('writeTo')} ${c.name}..." onkeydown="if(event.key==='Enter')sendChat()">${state.allowImages?`<button class="btn btn-ghost px-3" title="${t('genImg')}" onclick="askImage()">🖼</button>`:''}<button class="btn btn-primary px-5" onclick="sendChat()">➤</button></div></div></div>`;
  const cb=$('chatbox');if(cb)cb.scrollTop=cb.scrollHeight;
 }
@@ -834,18 +966,38 @@ async function sendChat(){
 /* Тренер сам генерирует картинку в особый момент (много задач, активность и т.п.) */
 function coachImageMoment(reason){
  if(!state.allowImages||(!state.apiKey&&!state.proxyUrl))return;
+ // дневной лимит авто-картинок от тренеров (защита бюджета)
+ const td=todayStr();
+ if(state.imgDay!==td){state.imgDay=td;state.imgCount=0;}
+ if(state.imgCount>=2)return;          // не больше 2 авто-картинок в день
+ state.imgCount++;save();
+ // персонализация: картинка отражает прогресс конкретного пользователя
+ const lv=levelInfo();
+ const done=state.completedCount, streak=state.streak;
+ const name=state.profile.name||'';
+ const weak=weakestSphere();
+ const coach=state.coach;
+ // у каждого тренера свой визуальный стиль + детали прогресса вшиты в промпт
+ const styleByCoach={
+  aurora:'тёплая мягкая иллюстрация, пастельные тона, нежный свет, ободряющее настроение',
+  johnny:'строгий динамичный спортивный постер, контраст, сила воли, дисциплина',
+  silas:'спокойная философская сцена, природа, рассвет/закат, гармония и мудрость',
+  rock:'эпичный мощный мотивационный постер, вершина горы, энергия чемпиона, драматичный свет',
+ };
  const prompts={
-  tasks:'Эпичная мотивационная сцена: атлет на рассвете, восходящее солнце, энергия и прогресс, кинематографично, без текста',
-  workout:'Триумф после тренировки: сильная фигура на вершине горы, лучи солнца, мощь, без текста',
-  date:'Тёплая романтическая атмосфера: мягкий свет, уют, нежность, эстетично, без текста',
+  tasks:`${styleByCoach[coach]||styleByCoach.rock}. Символ прогресса: путь/лестница/восхождение, ${done} пройденных ступеней, серия ${streak} дней огня. Сфера роста — ${weak}. Вдохновляющая, БЕЗ текста и букв на картинке.`,
+  workout:`${styleByCoach.rock}. Триумф после тренировки №${state.workoutCount}, сильная фигура, мышцы, пот, вершина, лучи солнца. БЕЗ текста на картинке.`,
+  date:`${styleByCoach.aurora}. Тёплый романтический вечер, уют, нежность, воспоминание. БЕЗ текста на картинке.`,
+  morning:`${styleByCoach[coach]||styleByCoach.aurora}. Светлое вдохновляющее утро, рассвет, энергия нового дня, уровень ${lv.lvl}. БЕЗ текста на картинке.`,
  };
  const note={
-  tasks:{ru:'Горжусь твоим прогрессом — держи картинку силы! 🔥',en:"Proud of your progress — here's a power image! 🔥",zh:'为你的进步骄傲——送你一张力量图！🔥'},
+  tasks:{ru:`${name}, уже ${done} заданий и серия ${streak} 🔥 Горжусь — вот твой путь силы!`,en:`${name}, ${done} tasks and a ${streak}-day streak 🔥 Proud of you — here's your path!`,zh:`${name}，已完成 ${done} 个任务，连续 ${streak} 天 🔥 为你骄傲——这是你的力量之路！`},
   workout:{ru:'Ты заслужил это! 💪',en:'You earned this! 💪',zh:'这是你应得的！💪'},
   date:{ru:'На память об этом вечере 💝',en:'A memory of this evening 💝',zh:'纪念这个夜晚 💝'},
+  morning:{ru:'Доброе утро! Лови заряд на день ☀️',en:'Good morning! Here\'s your charge for the day ☀️',zh:'早上好！送你今天的能量 ☀️'},
  };
  const l=state.lang||'ru';
- generateImage(prompts[reason]||prompts.tasks,(note[reason]||note.tasks)[l],state.coach);
+ generateImage(prompts[reason]||prompts.tasks,(note[reason]||note.tasks)[l],coach);
 }
 
 /* системная инструкция: персона + профиль + память + время */
@@ -1351,16 +1503,17 @@ function morningMotivation(){
    const ans=await callGemini(sys,[{role:'user',parts:[{text:'morning'}]}],false);
    state.chat.push({role:'coach',coach:state.coach,text:'☀️ '+(ans.reply||'Доброе утро!')});
    save();if(state.view==='chat')renderChat();
-   if(state.allowImages)generateImage('Светлое вдохновляющее утро, рассвет, энергия нового дня, свежесть, без текста','☀️',state.coach);
+   coachImageMoment('morning');
   }catch(e){}
  })();
 }
 
 /* ============================================================ СТАРТ */
 load();
-if(state.onboarded){touchStreak();morningMotivation();}
+loadVideos();
+if(state.onboarded){touchStreak();checkUnlocks();morningMotivation();}
 render();
-Object.assign(window,{navigate,closeModal,testNext,pickAnswer,finishTest,completeTask,toggleHabit,addHabit,removeHabit,advanceChallenge,completeSleep,sendChat,switchCoach,askImage,selectCoachSetting,saveApiKey,saveProxy,toggleImages,unlockRock,retakeTest,hardReset,startDate,finishDate,startIQ,answerIQ,startInterview,finishInterview,actSend,claimChest,setMood,saveIntention,startWorkout,workoutNext,workoutSkip,setLang,startGratitude,startVisualize,finishSession,startMeditation,speakMsg,stopSpeak,beginWorkout,wkStartTimer,wkStopTimer,beginMeditation,medPlay,medStop,medFinish});
+Object.assign(window,{navigate,closeModal,testNext,pickAnswer,finishTest,completeTask,toggleHabit,addHabit,removeHabit,advanceChallenge,completeSleep,sendChat,switchCoach,askImage,selectCoachSetting,saveApiKey,saveProxy,toggleImages,unlockRock,retakeTest,hardReset,startDate,finishDate,startIQ,answerIQ,startInterview,finishInterview,actSend,claimChest,setMood,saveIntention,startWorkout,workoutNext,workoutSkip,setLang,startGratitude,startVisualize,finishSession,startMeditation,speakMsg,stopSpeak,beginWorkout,wkStartTimer,wkStopTimer,beginMeditation,medPlay,medStop,medFinish,confirmTask});
 </script>
 </body>
 </html>
