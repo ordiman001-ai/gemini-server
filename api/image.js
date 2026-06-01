@@ -1,47 +1,86 @@
-/* Тренер сам генерирует картинку в особый момент (много задач, активность и т.п.) */
-function coachImageMoment(reason, extraContext){
- if(!state.allowImages||(!state.apiKey&&!state.proxyUrl))return;
+const BASE_URL = 'https://api.polza.ai/v1';
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
- // 1. Жёсткий запрет текста на АНГЛИЙСКОМ (нейросети так понимают лучше всего)
- const noText = ", photorealistic, cinematic lighting, highly detailed. STRICTLY NO TEXT, no words, no letters, no watermarks, textless, blank background.";
-
- // 2. Библиотека разных сцен (чтобы картинки не повторялись)
- const promptsLib = {
-  tasks: [
-   'A person standing on top of a mountain watching sunrise, epic landscape, motivation, success' + noText,
-   'A glowing golden trophy on a desk, achievement, progress' + noText,
-   'A person running forward on an empty road, sunny morning, determination, active lifestyle' + noText,
-   'A glowing abstract symbol of energy and power, neon lights, futuristic, success' + noText,
-   'A blooming tree on a sunny hill, growth, positive energy, bright colors' + noText
-  ],
-  workout: [
-   'A powerful athlete resting after a heavy workout, dark cinematic gym lighting, sweat, determination' + noText,
-   'A close up of a heavy kettlebell on the floor, epic lighting, fitness, strength' + noText,
-   'A person raising hands in victory on a mountain peak, bright sun, fitness success' + noText
-  ],
-  date: [
-   'A romantic candlelit dinner table for two, cozy atmosphere, warm glowing light, elegant' + noText,
-   'Two coffee cups on a table near a rainy window, cozy cafe, warm aesthetic, romantic' + noText,
-   'A beautiful sunset over a calm sea, romantic vibe, warm colors, peaceful' + noText
-  ]
- };
-
- // 3. Определяем, что рисовать (конкретный контекст или случайную сцену)
- let finalPrompt = '';
- if (extraContext) {
-    // Если передали точные детали (например, со свидания)
-    finalPrompt = 'Atmospheric beautiful scene: ' + extraContext + noText;
- } else {
-    // Иначе берем случайную из списка
-    const arr = promptsLib[reason] || promptsLib.tasks;
-    finalPrompt = arr[Math.floor(Math.random() * arr.length)];
- }
-
- const note={
-  tasks:{ru:'Горжусь твоим прогрессом — держи картинку силы! 🔥',en:"Proud of your progress — here's a power image! 🔥",zh:'为你的进步骄傲——送你一张力量图！🔥'},
-  workout:{ru:'Ты заслужил это! 💪',en:'You earned this! 💪',zh:'这是你应得的！💪'},
-  date:{ru:'На память об этом вечере 💝',en:'A memory of this evening 💝',zh:'纪念这个夜晚 💝'},
- };
- const l=state.lang||'ru';
- generateImage(finalPrompt, (note[reason]||note.tasks)[l], state.coach);
+function extractImage(obj){
+  if(!obj) return null;
+  if(obj.data && obj.data[0]){
+    const it=obj.data[0];
+    if(it.b64_json) return it.b64_json.startsWith('data:')?it.b64_json:'data:image/png;base64,'+it.b64_json;
+    if(it.url) return it.url;
+  }
+  if(typeof obj.data==='string' && obj.data.length>100){
+    return obj.data.startsWith('data:')||obj.data.startsWith('http')?obj.data:'data:image/png;base64,'+obj.data;
+  }
+  if(obj.url) return obj.url;
+  if(obj.image) return obj.image;
+  if(obj.b64_json) return obj.b64_json.startsWith('data:')?obj.b64_json:'data:image/png;base64,'+obj.b64_json;
+  return null;
 }
+
+module.exports = async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin','*');
+  res.setHeader('Access-Control-Allow-Methods','POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers','Content-Type');
+  
+  if(req.method==='OPTIONS') return res.status(200).end();
+  if(req.method!=='POST') return res.status(200).json({error:'Только POST запросы'});
+
+  try {
+    const { prompt } = req.body;
+    const KEY = process.env.POLZA_API_KEY;
+    
+    if(!KEY) return res.status(200).json({error:'Нет POLZA_API_KEY'});
+    
+    const H = {'Content-Type':'application/json','Authorization':'Bearer '+KEY};
+
+    // Жесткая установка на фотореализм и запрет текста (чтобы не было мультяшек и кривых букв)
+    const finalPrompt = prompt + ", photorealistic, cinematic lighting, highly detailed. STRICTLY NO TEXT, no words, no letters, blank background.";
+
+    // Отправляем в нативный эндпоинт /media с правильной структурой input
+    const reqBody = { 
+      model: 'tongyi-mai/z-image', 
+      input: {
+          prompt: finalPrompt,
+          aspect_ratio: '1:1'
+      }
+    };
+
+    const r = await fetch(BASE_URL + '/media', {
+      method: 'POST', 
+      headers: H,
+      body: JSON.stringify(reqBody)
+    });
+    
+    const textResponse = await r.text();
+    let first;
+    try {
+        first = JSON.parse(textResponse);
+    } catch(e) {
+        return res.status(200).json({error: 'Сбой API (не JSON): ' + textResponse.slice(0, 250)});
+    }
+
+    let img = extractImage(first);
+    if(img) return res.status(200).json({image:img});
+
+    const id = first.id || first.requestId || first.taskId;
+    
+    if(!id) return res.status(200).json({error:'ОШИБКА-ID: '+JSON.stringify(first).slice(0,700)});
+
+    // Ждем пока картинка сгенерируется
+    for(let i=0;i<14;i++){
+      await sleep(2000);
+      const pr = await fetch(BASE_URL+'/media/'+id, {headers:H});
+      const pd = await pr.json();
+      img = extractImage(pd);
+      if(img) return res.status(200).json({image:img});
+      if(pd.status==='failed' || pd.status==='error'){
+        return res.status(200).json({error:'ОШИБКА-ГЕНЕРАЦИИ: '+JSON.stringify(pd).slice(0,700)});
+      }
+      if(i===13){
+        return res.status(200).json({error:'ТАЙМАУТ: '+JSON.stringify(pd).slice(0,700)});
+      }
+    }
+  } catch(e) {
+    return res.status(200).json({error:'СБОЙ-КОДА: '+String(e)});
+  }
+};
