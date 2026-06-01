@@ -1,4 +1,4 @@
-const BASE_URL  = 'https://api.polza.ai/v1';
+const BASE_URL = 'https://api.polza.ai/v1';
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 function extractImage(obj){
@@ -29,15 +29,19 @@ module.exports = async (req, res) => {
     const { prompt } = req.body;
     const KEY = process.env.POLZA_API_KEY;
     
-    if(!KEY) return res.status(200).json({error:'Нет POLZA_API_KEY в настройках Vercel'});
+    if(!KEY) return res.status(200).json({error:'Нет POLZA_API_KEY'});
     
     const H = {'Content-Type':'application/json','Authorization':'Bearer '+KEY};
 
+    // Бронебойный запрос: распихиваем aspect_ratio везде, чтобы обойти фильтры агрегатора
     const reqBody = { 
       model: 'tongyi-mai/z-image', 
       prompt: 'Motivational illustration, no text: ' + prompt, 
       n: 1,
-      aspect_ratio: '1:1' // Убрали size, теперь только этот параметр
+      size: '1024x1024',
+      aspect_ratio: '1:1', // Стандартный уровень
+      extra_body: { aspect_ratio: '1:1' }, // Для систем на базе LiteLLM
+      parameters: { aspect_ratio: '1:1' }  // Для некоторых других шлюзов
     };
 
     const r = await fetch(BASE_URL+'/images/generations', {
@@ -59,8 +63,7 @@ module.exports = async (req, res) => {
 
     const id = first.id || first.requestId || first.taskId;
     
-    // МЕНЯЕМ ТЕКСТ ОШИБКИ ДЛЯ ПРОВЕРКИ
-    if(!id) return res.status(200).json({error:'ВЕРСИЯ-5 (нет id): '+JSON.stringify(first).slice(0,700)});
+    if(!id) return res.status(200).json({error:'ВЕРСИЯ-6 (нет id): '+JSON.stringify(first).slice(0,700)});
 
     for(let i=0;i<14;i++){
       await sleep(2000);
@@ -69,13 +72,13 @@ module.exports = async (req, res) => {
       img = extractImage(pd);
       if(img) return res.status(200).json({image:img});
       if(pd.status==='failed' || pd.status==='error'){
-        return res.status(200).json({error:'ВЕРСИЯ-5 (ошибка генерации): '+JSON.stringify(pd).slice(0,700)});
+        return res.status(200).json({error:'ВЕРСИЯ-6 (ошибка генерации): '+JSON.stringify(pd).slice(0,700)});
       }
       if(i===13){
-        return res.status(200).json({error:'ВЕРСИЯ-5 (таймаут ожидания): '+JSON.stringify(pd).slice(0,700)});
+        return res.status(200).json({error:'ВЕРСИЯ-6 (таймаут): '+JSON.stringify(pd).slice(0,700)});
       }
     }
   } catch(e) {
-    return res.status(200).json({error:'ВЕРСИЯ-5 (сбой кода): '+String(e)});
+    return res.status(200).json({error:'ВЕРСИЯ-6 (сбой кода): '+String(e)});
   }
 };
