@@ -33,20 +33,20 @@ module.exports = async (req, res) => {
     
     const H = {'Content-Type':'application/json','Authorization':'Bearer '+KEY};
 
-    // Бронебойный запрос: распихиваем aspect_ratio везде, чтобы обойти фильтры агрегатора
+    // ФИНАЛЬНОЕ РЕШЕНИЕ: ИСПОЛЬЗУЕМ НАТИВНЫЙ ЭНДПОИНТ POLZA.AI (/media)
+    // Упаковываем параметры в блок input согласно их родной документации
     const reqBody = { 
       model: 'tongyi-mai/z-image', 
-      prompt: 'Motivational illustration, no text: ' + prompt, 
-      n: 1,
-      size: '1024x1024',
-      aspect_ratio: '1:1', // Стандартный уровень
-      extra_body: { aspect_ratio: '1:1' }, // Для систем на базе LiteLLM
-      parameters: { aspect_ratio: '1:1' }  // Для некоторых других шлюзов
+      input: {
+          prompt: 'Motivational illustration, no text: ' + prompt, 
+          aspect_ratio: '1:1'
+      }
     };
 
-    const r = await fetch(BASE_URL+'/images/generations', {
-      method:'POST', 
-      headers:H,
+    // Бьем напрямую в /media, минуя корявый фильтр /images/generations
+    const r = await fetch(BASE_URL + '/media', {
+      method: 'POST', 
+      headers: H,
       body: JSON.stringify(reqBody)
     });
     
@@ -63,8 +63,9 @@ module.exports = async (req, res) => {
 
     const id = first.id || first.requestId || first.taskId;
     
-    if(!id) return res.status(200).json({error:'ВЕРСИЯ-6 (нет id): '+JSON.stringify(first).slice(0,700)});
+    if(!id) return res.status(200).json({error:'ВЕРСИЯ-7 (нет id): '+JSON.stringify(first).slice(0,700)});
 
+    // Ждем готовности картинки
     for(let i=0;i<14;i++){
       await sleep(2000);
       const pr = await fetch(BASE_URL+'/media/'+id, {headers:H});
@@ -72,13 +73,13 @@ module.exports = async (req, res) => {
       img = extractImage(pd);
       if(img) return res.status(200).json({image:img});
       if(pd.status==='failed' || pd.status==='error'){
-        return res.status(200).json({error:'ВЕРСИЯ-6 (ошибка генерации): '+JSON.stringify(pd).slice(0,700)});
+        return res.status(200).json({error:'ВЕРСИЯ-7 (ошибка генерации): '+JSON.stringify(pd).slice(0,700)});
       }
       if(i===13){
-        return res.status(200).json({error:'ВЕРСИЯ-6 (таймаут): '+JSON.stringify(pd).slice(0,700)});
+        return res.status(200).json({error:'ВЕРСИЯ-7 (таймаут): '+JSON.stringify(pd).slice(0,700)});
       }
     }
   } catch(e) {
-    return res.status(200).json({error:'ВЕРСИЯ-6 (сбой кода): '+String(e)});
+    return res.status(200).json({error:'ВЕРСИЯ-7 (сбой кода): '+String(e)});
   }
 };
