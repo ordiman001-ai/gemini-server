@@ -33,7 +33,13 @@ module.exports = async (req, res) => {
 
     const r = await fetch(BASE_URL+'/images/generations',{
       method:'POST', headers:H,
-      body:JSON.stringify({ model:IMG_MODEL, prompt:'Motivational illustration, no text: '+prompt, n:1, size:'1024x1024' })
+      body:JSON.stringify({ 
+        model: targetModel, 
+        prompt: 'Motivational illustration, no text: ' + prompt, 
+        n: 1, 
+        size: '1024x1024',
+        aspect_ratio: '1:1' // <-- Вот эта строчка решает проблему
+      })
     });
     const first = await r.json();
 
