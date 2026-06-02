@@ -1,13 +1,13 @@
 {
   "motivation": [
-    { "id": "v1", "coach": "rock",   "title": { "ru": "Заряд силы",  "en": "Power charge", "zh": "力量充能" }, "url": "" },
+    { "id": "v1", "coach": "rock",   "title": { "ru": "Заряд силы",  "en": "Power charge", "zh": "力量充能" }, "url": "https://gemini-server-kuyr.vercel.app/test1.mp4" },
     { "id": "v2", "coach": "johnny", "title": { "ru": "Дисциплина",  "en": "Discipline",   "zh": "自律" },   "url": "" },
     { "id": "v3", "coach": "aurora", "title": { "ru": "Тёплое утро", "en": "Warm morning", "zh": "温暖的早晨" }, "url": "" },
     { "id": "v4", "coach": "silas",  "title": { "ru": "Спокойствие", "en": "Stillness",    "zh": "宁静" },   "url": "" },
     { "id": "v5", "coach": "steel",  "title": { "ru": "Беги",        "en": "Run",          "zh": "奔跑" },   "url": "" }
   ],
   "exercises": {
-    "warmup": "", "squat": "", "pushup": "", "plank": "", "lunge": "",
+    "warmup": "https://gemini-server-kuyr.vercel.app/test1.mp4", "squat": "", "pushup": "", "plank": "", "lunge": "",
     "jumpingjack": "", "glutebridge": "", "highknees": ""
   },
   "meditations": {
