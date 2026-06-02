@@ -33,7 +33,7 @@ module.exports = async (req, res) => {
 
     if (!wantJson) return res.status(200).json({ reply: raw, newTasks: [] });
     raw = raw.replace(/```json|```/g, '').trim();
-    try { const p = JSON.parse(raw); return res.status(200).json({ reply: p.reply || raw, newTasks: Array.isArray(p.newTasks) ? p.newTasks : [] }); }
+    try { const p = JSON.parse(raw); return res.status(200).json({ reply: p.reply || raw, newTasks: Array.isArray(p.newTasks) ? p.newTasks : [], important: typeof p.important === 'string' ? p.important : '' }); }
     catch (e) { return res.status(200).json({ reply: raw, newTasks: [] }); }
   } catch (e) {
     return res.status(500).json({ error: String(e) });
