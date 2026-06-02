@@ -7,10 +7,10 @@
     { "id": "v5", "coach": "steel",  "title": { "ru": "Беги",        "en": "Run",          "zh": "奔跑" },   "url": "https://gemini-server-kuyr.vercel.app/rock1%20(1)%20(1).mp4" }
   ],
   "exercises": {
-    "warmup": "https://gemini-server-kuyr.vercel.app/test1.mp4", "squat": "", "pushup": "", "plank": "", "lunge": "",
+    "warmup": "", "squat": "", "pushup": "", "plank": "", "lunge": "",
     "jumpingjack": "", "glutebridge": "", "highknees": ""
   },
   "meditations": {
-    "calm": "https://gemini-server-kuyr.vercel.app/rock1%20(1)%20(1).mp4", "focus": "", "sleep": "", "gratitude": ""
+    "calm": "", "focus": "", "sleep": "https://gemini-server-kuyr.vercel.app/sleap.mp3", "gratitude": ""
   }
 }
