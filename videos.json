@@ -5,7 +5,6 @@
     { "id": "v3", "coach": "aurora", "title": { "ru": "Тёплое утро", "en": "Warm morning", "zh": "温暖的早晨" }, "url": "" },
     { "id": "v4", "coach": "silas",  "title": { "ru": "Спокойствие", "en": "Stillness",    "zh": "宁静" },   "url": "" },
     { "id": "v5", "coach": "steel",  "title": { "ru": "Беги",        "en": "Run",          "zh": "奔跑" },   "url": "https://gemini-server-kuyr.vercel.app/rock1%20(1)%20(1).mp4" }
-    { "id": "v6", "coach": "steel",  "title": { "ru": "Беги",        "en": "Run",          "zh": "奔跑" },   "url": "https://gemini-server-kuyr.vercel.app/test%20(1).mp4" }
   ],
   "exercises": {
     "warmup": "https://gemini-server-kuyr.vercel.app/test1.mp4", "squat": "", "pushup": "", "plank": "", "lunge": "",
