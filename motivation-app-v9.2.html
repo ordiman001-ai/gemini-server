@@ -1225,9 +1225,17 @@ function renderChat(){
  const msgs=state.chat.map((m,mi)=>{
   if(m.role==='user')return`<div class="flex justify-end mb-3"><div class="px-4 py-3 rounded-2xl rounded-br-md max-w-[80%] text-sm" style="background:var(--indigo);color:#fff">${esc(m.text)}${m.img?`<img src="${m.img}" style="max-width:200px;border-radius:12px;margin-top:8px;display:block">`:''}</div></div>`;
   const cc=COACHES[m.coach]||c;
-  const imgHtml=m.img?`<img src="${m.img}" style="max-width:240px;border-radius:14px;margin-top:8px;display:block">`:'';
-  const vidHtml=m.video?`<video src="${m.video}" controls playsinline style="max-width:260px;border-radius:14px;margin-top:8px;display:block"></video>`:'';
-  return`<div class="flex justify-start mb-3 gap-2"><div class="text-xl">${cc.emoji}</div><div class="px-4 py-3 rounded-2xl rounded-bl-md max-w-[80%] text-sm" style="background:#fff;border:1px solid var(--line)"><b style="color:${cc.color}">${cc.name}</b> <button onclick="speakMsg(${mi})" title="🔊" style="border:none;background:none;cursor:pointer;font-size:13px;opacity:.6">🔊</button><br>${esc(m.text).replace(/\n/g,'<br>')}${imgHtml}${vidHtml}</div></div>`;
+  const cc=COACHES[m.coach]||c;
+  let mediaHtml = '';
+  const mediaUrl = m.video || m.img;
+  if (mediaUrl) {
+    if (mediaUrl.includes('.mp4')) {
+      mediaHtml = `<video src="${mediaUrl}" controls playsinline webkit-playsinline preload="auto" style="max-width:100%; max-height:240px; border-radius:14px; margin-top:8px; display:block"></video>`;
+    } else {
+      mediaHtml = `<img src="${mediaUrl}" style="max-width:240px; border-radius:14px; margin-top:8px; display:block">`;
+    }
+  }
+  return`<div class="flex justify-start mb-3 gap-2"><div class="text-xl">${cc.emoji}</div><div class="px-4 py-3 rounded-2xl rounded-bl-md max-w-[80%] text-sm" style="background:#fff;border:1px solid var(--line)"><b style="color:${cc.color}">${cc.name}</b> <button onclick="speakMsg(${mi})" title="🔊" style="border:none;background:none;cursor:pointer;font-size:13px;opacity:.6">🔊</button><br>${esc(m.text).replace(/\n/g,'<br>')}${mediaHtml}</div></div>`;
  }).join('');
  const switcher=Object.entries(COACHES).map(([k,co])=>{
    let locked=false, lockMsg='';
