@@ -1,20 +1,26 @@
-{
-  "motivation": [
-    { "id": "v1", "coach": "rock",   "title": { "ru": "Заряд силы",  "en": "Power charge", "zh": "力量充能" }, "url": "" },
-    { "id": "v2", "coach": "johnny", "title": { "ru": "Дисциплина",  "en": "Discipline",   "zh": "自律" },   "url": "" },
-    { "id": "v3", "coach": "aurora", "title": { "ru": "Тёплое утро", "en": "Warm morning", "zh": "温暖的早晨" }, "url": "" },
-    { "id": "v4", "coach": "silas",  "title": { "ru": "Спокойствие", "en": "Stillness",    "zh": "宁静" },   "url": "" },
-    { "id": "v5", "coach": "steel",  "title": { "ru": "Беги",        "en": "Run",          "zh": "奔跑" },   "url": "https://github.com/ordiman001-ai/gemini-server/raw/refs/heads/main/rock1.mp4" }
-  ],
-  "exercises": {
-    "warmup": "",
-    "squat": "",
-    "pushup": "",
-    "plank": "",
-    "lunge": "",
-    "jumpingjack": "",
-    "glutebridge": "",
-    "highknees": ""
+[
+  {
+    "id": "v1",
+    "coach": "rock",
+    "title": {"ru": "Заряд силы", "en": "Power charge", "zh": "力量充能"},
+    "url": "https://cdn.jsdelivr.net/gh/ordiman001-ai/gemini-server@main/videos/rock1.mp4"
+  },
+  {
+    "id": "v2",
+    "coach": "johnny",
+    "title": {"ru": "Дисциплина", "en": "Discipline", "zh": "自律"},
+    "url": "https://cdn.jsdelivr.net/gh/ordiman001-ai/gemini-server@main/videos/test.mp4"
+  },
+  {
+    "id": "v3",
+    "coach": "aurora",
+    "title": {"ru": "Тёплое утро", "en": "Warm morning", "zh": "温暖的早晨"},
+    "url": ""
+  },
+  {
+    "id": "v4",
+    "coach": "silas",
+    "title": {"ru": "Спокойствие", "en": "Stillness", "zh": "宁静"},
+    "url": ""
   }
-}
-
+]
