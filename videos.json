@@ -7,7 +7,7 @@
     { "id": "v5", "coach": "steel",  "title": { "ru": "Беги",        "en": "Run",          "zh": "奔跑" },   "url": "https://gemini-server-kuyr.vercel.app/rock1%20(1)%20(1).mp4" }
   ],
   "exercises": {
-    "warmup": "", "squat": "", "pushup": "", "plank": "", "lunge": "",
+    "warmup": "https://gemini-server-kuyr.vercel.app/test1.mp4", "squat": "", "pushup": "", "plank": "", "lunge": "",
     "jumpingjack": "", "glutebridge": "", "highknees": ""
   },
   "meditations": {
