@@ -18,7 +18,7 @@ module.exports = async (req, res) => {
       const text = (c.parts || []).map(p => p.text).join('\n');
       messages.push({ role: c.role === 'model' ? 'assistant' : 'user', content: text });
     });
-    if (wantJson) messages.push({ role: 'system', content: 'Верни ТОЛЬКО валидный JSON без markdown. Сохраняй ВСЕ поля, которые требует основная инструкция (reply, newTasks, important, calAction).' });
+    if (wantJson) messages.push({ role: 'system', content: 'Верни ТОЛЬКО валидный JSON без markdown. Сохраняй ВСЕ поля, которые требует основная инструкция (reply, newTasks, important, calActions).' });
 
     const r = await fetch(BASE_URL.replace(/\/$/, '') + '/chat/completions', {
       method: 'POST',
@@ -33,7 +33,7 @@ module.exports = async (req, res) => {
 
     if (!wantJson) return res.status(200).json({ reply: raw, newTasks: [] });
     raw = raw.replace(/```json|```/g, '').trim();
-    try { const p = JSON.parse(raw); return res.status(200).json({ reply: p.reply || raw, newTasks: Array.isArray(p.newTasks) ? p.newTasks : [], important: typeof p.important === 'string' ? p.important : '', calAction: p.calAction || null }); }
+    try { const p = JSON.parse(raw); return res.status(200).json({ reply: p.reply || raw, newTasks: Array.isArray(p.newTasks) ? p.newTasks : [], important: typeof p.important === 'string' ? p.important : '', calActions: Array.isArray(p.calActions) ? p.calActions : (p.calAction ? [p.calAction] : []), goalPlan: p.goalPlan || null }); }
     catch (e) { return res.status(200).json({ reply: raw, newTasks: [] }); }
   } catch (e) {
     return res.status(500).json({ error: String(e) });
