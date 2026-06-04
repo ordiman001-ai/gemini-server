@@ -555,6 +555,7 @@ function defaultState(){
   bond:{},            // скрытая глубина отношений с каждым тренером (счётчик общений, без индикатора)
   bigGoal:null,       // крупная цель: {title,deadline,milestones:[{title,date,done}],active,started}
   goalDraft:null,     // черновик плана цели, ждёт согласования
+  goalMode:null,      // активный режим обсуждения цели до утверждения
   hintCalShown:false, // показана ли подсказка про календарь/задачи
   goalArchive:[],     // архив прошлых целей
   calMonth:'',        // какой месяц показан в календаре (для навигации)
@@ -631,7 +632,7 @@ function addCalItem(ds,title,time,byCoach){
  const it={id:uid(),title:title||'Дело',time:time||'',byCoach:!!byCoach,done:false};
  d.items.push(it);d.items.sort((a,b)=>(a.time||'99')<(b.time||'99')?-1:1);save();return it;
 }
-function toggleCalItem(ds,id){const it=calItems(ds).find(x=>x.id===id);if(it){it.done=!it.done;if(it.done){calMarkTask();state.completedCount++;addPoints(5);}save();}}
+function toggleCalItem(ds,id){const it=calItems(ds).find(x=>x.id===id);if(it){it.done=!it.done;if(it.done){calMarkTask();state.completedCount++;addPoints(5);} if(it.goalMid&&state.bigGoal){const m=state.bigGoal.milestones.find(x=>x.id===it.goalMid);if(m)m.done=it.done;} save();}}
 function editCalItem(ds,id,title,time){const it=calItems(ds).find(x=>x.id===id);if(!it)return;if(typeof title==='string')it.title=title;if(typeof time==='string')it.time=time;save();}
 function moveCalItem(fromDs,id,toDs,time){
  const arr=calItems(fromDs);const i=arr.findIndex(x=>x.id===id);if(i<0)return null;
@@ -663,45 +664,78 @@ function calSetNote(ds,txt){calDay(ds).note=txt;}
 function calToggleHabit(ds,hid){const d=calDay(ds);d.habits[hid]=!d.habits[hid];}
 
 /* Пул спринтов: тема, длина, описание (зачем/как не сорваться/что даст), ежедневное сопровождение */
+/* СПРИНТЫ — научно обоснованные программы с ПОСТЕПЕННЫМ входом.
+   Каждый день = конкретное действие (steps), которое пользователь отмечает осознанно (не автозачёт).
+   day[i] берётся из массива steps по фазам; если дней больше, чем шагов — последние шаги повторяются (закрепление). */
 const SPRINTS=[
- {id:'focus7', days:7,  sphere:'Фокус',   emoji:'🎯',
+ {id:'sleep14', days:14, sphere:'Здоровье', emoji:'🌙', color:'#8b5cf6',
+  title:{ru:'14 ночей здорового сна',en:'14 nights of healthy sleep',zh:'14晚健康睡眠'},
+  why:{ru:'Сон — фундамент энергии, настроения, памяти и иммунитета. Налаживаем мягко, по одному шагу.',en:'Sleep is the foundation of energy, mood, memory and immunity. We fix it gently, step by step.',zh:'睡眠是精力、情绪、记忆和免疫的基础。我们循序渐进地改善。'},
+  science:{ru:'Основано на гигиене сна (CDC, Matthew Walker): постоянное время подъёма и отказ от экранов синхронизируют циркадные ритмы.',en:'Based on sleep hygiene (CDC, Matthew Walker): consistent wake time and no screens sync circadian rhythms.',zh:'基于睡眠卫生（CDC、Matthew Walker）：固定起床时间和远离屏幕可同步昼夜节律。'},
+  steps:{
+   ru:['Сегодня просто заметь, во сколько лёг и встал — без изменений, только наблюдение.','Поставь фиксированное время подъёма на завтра и встань по будильнику.','За 30 минут до сна приглуши яркий свет в комнате.','Убери телефон от кровати — заряжай его в другом конце комнаты.','Никаких экранов за 1 час до сна (книга вместо ленты).','Не пей кофе/энергетики после 15:00.','Проветри спальню и сделай её прохладнее перед сном.','Ложись на 15 минут раньше, чем вчера.','Утром сразу впусти дневной свет (окно/улица) — это запускает бодрость.','10 минут спокойного без экрана перед сном (дыхание, растяжка).','Повтори всё, что закрепил: фикс. подъём, без экранов, прохлада.','Если не уснул за 20 минут — встань, побудь в тишине, вернись.','Держи режим даже сегодня — стабильность важнее идеала.','Подведи итог: какой шаг дал тебе лучший сон? Оставь его навсегда.'],
+   en:['Today just notice when you went to bed and woke up — no changes, only observe.','Set a fixed wake time for tomorrow and get up with the alarm.','Dim bright lights in the room 30 minutes before bed.','Move your phone away from the bed — charge it across the room.','No screens 1 hour before sleep (a book instead of feed).','No coffee/energy drinks after 3 PM.','Air out the bedroom and make it cooler before sleep.','Go to bed 15 minutes earlier than yesterday.','Let in daylight first thing in the morning — it triggers alertness.','10 quiet screen-free minutes before bed (breathing, stretching).','Repeat what you locked in: fixed wake time, no screens, cool room.','If not asleep in 20 min — get up, sit in quiet, return.','Keep the routine even today — consistency beats perfection.','Reflect: which step gave you the best sleep? Keep it forever.'],
+   zh:['今天只观察你几点睡、几点醒——不改变，只记录。','为明天设定固定起床时间，闹钟一响就起。','睡前30分钟调暗房间强光。','把手机放远离床——在房间另一端充电。','睡前1小时不看屏幕（用书代替刷手机）。','下午3点后不喝咖啡/能量饮料。','睡前给卧室通风并降温。','比昨天早15分钟上床。','早晨第一件事就接触日光——触发清醒。','睡前10分钟安静无屏幕（呼吸、拉伸）。','重复你已固定的：固定起床、无屏幕、凉爽。','20分钟没睡着就起来，安静待一会儿再回去。','即使今天也保持作息——稳定胜过完美。','总结：哪一步让你睡得最好？永远保留它。']}},
+ {id:'move14', days:14, sphere:'Спорт', emoji:'💪', color:'#10b981',
+  title:{ru:'14 дней движения',en:'14 days of movement',zh:'14天运动'},
+  why:{ru:'Движение поднимает энергию, настроение и здоровье. Входим постепенно, без надрыва.',en:'Movement boosts energy, mood and health. We ease in, no burnout.',zh:'运动提升精力、情绪和健康。循序渐进，不勉强。'},
+  science:{ru:'ВОЗ рекомендует 150 мин активности в неделю; привычка формируется через малые повторяемые действия (BJ Fogg, «Tiny Habits»).',en:'WHO recommends 150 min activity/week; habits form via small repeatable actions (BJ Fogg, Tiny Habits).',zh:'世卫组织建议每周150分钟活动；习惯通过小而可重复的行为形成（BJ Fogg）。'},
+  steps:{
+   ru:['5 минут лёгкой разминки утром — только чтобы начать.','10 минут прогулки в спокойном темпе.','5 приседаний + 5 наклонов, не спеша.','15 минут прогулки или 10 минут дома.','Разминка всех суставов сверху вниз, 5 минут.','10 приседаний и небольшая растяжка.','20 минут активности на твой выбор.','День восстановления: лёгкая растяжка 10 минут.','Добавь 5 отжиманий (можно с колен) к разминке.','25 минут движения — прогулка или тренировка.','Подключи лестницу вместо лифта весь день.','Тренировка средней интенсивности 20 минут.','Лёгкий активный день — прогулка + растяжка.','Итог: выбери формат, который понравился, и сделай его привычкой.'],
+   en:['5 minutes of light warm-up in the morning — just to start.','10-minute walk at an easy pace.','5 squats + 5 bends, slowly.','15-minute walk or 10 minutes at home.','Mobilize all joints top to bottom, 5 minutes.','10 squats and a little stretching.','20 minutes of activity of your choice.','Recovery day: light stretching 10 minutes.','Add 5 push-ups (knees ok) to the warm-up.','25 minutes of movement — walk or workout.','Take the stairs instead of the elevator all day.','Medium-intensity workout 20 minutes.','Light active day — walk + stretch.','Reflect: pick the format you liked and make it a habit.'],
+   zh:['早晨5分钟轻度热身——只为开始。','以轻松节奏走10分钟。','慢慢做5个深蹲+5个体前屈。','步行15分钟或在家10分钟。','从上到下活动所有关节，5分钟。','10个深蹲和一点拉伸。','自选20分钟活动。','恢复日：轻度拉伸10分钟。','热身中加5个俯卧撑（可跪姿）。','25分钟运动——步行或锻炼。','一整天用爬楼梯代替电梯。','中等强度锻炼20分钟。','轻度活动日——步行+拉伸。','总结：选你喜欢的方式，养成习惯。']}},
+ {id:'focus7', days:7, sphere:'Фокус', emoji:'🎯', color:'#6366f1',
   title:{ru:'7 дней фокуса',en:'7 days of focus',zh:'7天专注'},
-  why:{ru:'Научиться удерживать внимание и доводить начатое до конца.',en:'Learn to hold attention and finish what you start.',zh:'学会保持专注、把事情做完。'},
-  hold:{ru:'Убирай телефон во время дела и работай отрезками по 25 минут. Сорвался — не бросай весь спринт, просто отметь следующий день.',en:'Put your phone away and work in 25-minute blocks. Slipped? Don’t quit the sprint — just mark the next day.',zh:'做事时收起手机，按25分钟工作。失误了别放弃，继续打卡下一天。'},
-  gain:{ru:'Через неделю мозг привыкнет к концентрации, дела пойдут быстрее.',en:'In a week your brain adapts to focus and work speeds up.',zh:'一周后大脑适应专注，效率提升。'}},
- {id:'sport14',days:14, sphere:'Спорт',   emoji:'💪',
-  title:{ru:'14 дней спорта',en:'14 days of sport',zh:'14天运动'},
-  why:{ru:'Сделать движение ежедневной привычкой, поднять энергию.',en:'Make movement a daily habit and raise your energy.',zh:'让运动成为日常习惯，提升能量。'},
-  hold:{ru:'Хотя бы 10 минут в день — это уже победа. Лучше мало, но каждый день, чем много и бросить.',en:'Even 10 minutes a day is a win. Better small but daily than a lot then quitting.',zh:'每天哪怕10分钟也是胜利。少而每天，好过多而中断。'},
-  gain:{ru:'Тело окрепнет, сон улучшится, появится «гормон бодрости».',en:'Your body strengthens, sleep improves, energy rises.',zh:'身体更强、睡眠更好、精力更充沛。'}},
- {id:'habit21',days:21, sphere:'Мотивация',emoji:'🌱',
-  title:{ru:'21 день привычки',en:'21-day habit',zh:'21天习惯'},
-  why:{ru:'Закрепить одну полезную привычку до автоматизма.',en:'Lock in one good habit until it’s automatic.',zh:'把一个好习惯固化成自动行为。'},
-  hold:{ru:'Привяжи привычку к уже существующему действию (после кофе — 5 минут чтения). Не пропускай два дня подряд.',en:'Anchor the habit to an existing action (after coffee — 5 min reading). Never skip two days in a row.',zh:'把新习惯绑定到已有动作（喝咖啡后读5分钟）。别连续两天中断。'},
-  gain:{ru:'Через 21 день действие станет частью тебя, без усилий воли.',en:'After 21 days the action becomes part of you, effortlessly.',zh:'21天后，行为成为你的一部分，毫不费力。'}},
- {id:'sleep28',days:28, sphere:'Здоровье',emoji:'🌙',
-  title:{ru:'28 ночей здорового сна',en:'28 nights of healthy sleep',zh:'28晚健康睡眠'},
-  why:{ru:'Наладить режим сна — основу энергии, настроения и здоровья.',en:'Fix your sleep — the foundation of energy, mood and health.',zh:'调整睡眠——精力、情绪和健康的基础。'},
-  hold:{ru:'Ложись и вставай в одно время даже в выходные. За час до сна — без экранов.',en:'Sleep and wake at the same time even on weekends. No screens an hour before bed.',zh:'即使周末也固定作息。睡前一小时不看屏幕。'},
-  gain:{ru:'Через месяц стабильный сон перезапустит энергию и ясность ума.',en:'In a month, stable sleep restores your energy and clarity.',zh:'一个月后，规律睡眠重启你的精力与清晰度。'}},
+  why:{ru:'Учимся удерживать внимание и доводить начатое. Тренируем концентрацию по чуть-чуть.',en:'Learn to hold attention and finish what you start. Train concentration bit by bit.',zh:'学会保持注意力、完成所做。逐步训练专注。'},
+  science:{ru:'Техника Pomodoro и принцип «уберечь внимание»: телефон вне поля зрения снижает когнитивную нагрузку (исследование «Brain Drain», 2017).',en:'Pomodoro and attention protection: phone out of sight reduces cognitive load (Brain Drain study, 2017).',zh:'番茄工作法与注意力保护：手机不在视线内可降低认知负荷（2017"大脑流失"研究）。'},
+  steps:{
+   ru:['Один отрезок 15 минут без телефона на одной задаче.','Два отрезка по 20 минут с перерывом 5 минут.','25 минут полной концентрации (телефон в другой комнате).','Перед работой запиши 1 главную задачу дня и сделай её первой.','Два цикла по 25 минут с короткими перерывами.','Поработай 30 минут без единого переключения на телефон.','Итог: сколько ты успел в фокусе? Закрепи лучший ритм.'],
+   en:['One 15-minute block without your phone on a single task.','Two 20-minute blocks with a 5-minute break.','25 minutes of full focus (phone in another room).','Write the 1 main task of the day and do it first.','Two 25-minute cycles with short breaks.','Work 30 minutes without a single switch to your phone.','Reflect: how much did you get done? Keep the best rhythm.'],
+   zh:['一段15分钟，单一任务，不碰手机。','两段20分钟，中间休息5分钟。','25分钟全神贯注（手机放另一房间）。','先写下当天1件主要任务并第一个完成。','两个25分钟周期，短暂休息。','工作30分钟，一次都不切换到手机。','总结：你完成了多少？保留最佳节奏。']}},
+ {id:'calm10', days:10, sphere:'Здоровье', emoji:'🧘', color:'#0ea5e9',
+  title:{ru:'10 дней спокойствия',en:'10 days of calm',zh:'10天平静'},
+  why:{ru:'Снижаем стресс и тревогу простыми ежедневными практиками. Постепенно, мягко.',en:'Lower stress and anxiety with simple daily practices. Gradually, gently.',zh:'用简单的每日练习降低压力和焦虑。循序渐进、温和。'},
+  science:{ru:'Диафрагмальное дыхание и практики осознанности снижают кортизол и активность стресс-системы (исследования mindfulness, Kabat-Zinn).',en:'Diaphragmatic breathing and mindfulness lower cortisol and stress-system activity (mindfulness research, Kabat-Zinn).',zh:'腹式呼吸和正念可降低皮质醇和压力系统活动（正念研究，Kabat-Zinn）。'},
+  steps:{
+   ru:['2 минуты медленного дыхания: вдох на 4, выдох на 6.','Замечай 3 приятные мелочи за день и запиши их.','5 минут тишины без телефона.','Дыхание 4-7-8 перед сном, 4 цикла.','Прогулка 10 минут с вниманием к звукам и запахам.','Запиши, что тебя тревожит, и одно действие по этому.','5 минут наблюдения за дыханием, не меняя его.','Сделай паузу 3 раза за день и сделай 3 глубоких вдоха.','Поблагодари себя за что-то конкретное сегодня.','Итог: какая практика дала покой? Оставь её в жизни.'],
+   en:['2 minutes of slow breathing: inhale for 4, exhale for 6.','Notice 3 small good things today and write them down.','5 minutes of silence without your phone.','4-7-8 breathing before bed, 4 cycles.','A 10-minute walk attending to sounds and smells.','Write what worries you and one action about it.','5 minutes watching your breath without changing it.','Pause 3 times today and take 3 deep breaths.','Thank yourself for something specific today.','Reflect: which practice brought calm? Keep it in your life.'],
+   zh:['2分钟慢呼吸：吸气4秒，呼气6秒。','留意今天3件小美好并写下来。','5分钟不碰手机的安静。','睡前4-7-8呼吸，4个循环。','10分钟散步，留意声音和气味。','写下你的担忧及一个应对行动。','5分钟观察呼吸，不去改变它。','今天暂停3次，各做3次深呼吸。','为今天某件具体的事感谢自己。','总结：哪个练习带来平静？保留在生活中。']}},
+ {id:'gratitude7', days:7, sphere:'Мотивация', emoji:'🙏', color:'#f59e0b',
+  title:{ru:'7 дней благодарности',en:'7 days of gratitude',zh:'7天感恩'},
+  why:{ru:'Тренируем мозг замечать хорошее — это поднимает настроение и устойчивость.',en:'Train your brain to notice good — it lifts mood and resilience.',zh:'训练大脑注意美好——提升情绪和韧性。'},
+  science:{ru:'Дневник благодарности повышает уровень счастья и снижает депрессивные симптомы (Emmons & McCullough, 2003).',en:'Gratitude journaling raises happiness and lowers depressive symptoms (Emmons & McCullough, 2003).',zh:'感恩日记提升幸福感、降低抑郁症状（Emmons & McCullough, 2003）。'},
+  steps:{
+   ru:['Запиши 3 вещи, за которые благодарен сегодня.','Поблагодари одного человека (вслух или сообщением).','Вспомни трудность, которая тебя чему-то научила.','Заметь что-то красивое вокруг и побудь с этим минуту.','Запиши, за что благодарен в себе.','Скажи спасибо за маленькую обыденную вещь (еда, тепло, сон).','Итог: перечитай неделю благодарностей — что изменилось в настроении?'],
+   en:['Write 3 things you are grateful for today.','Thank one person (out loud or by message).','Recall a hardship that taught you something.','Notice something beautiful around you and stay with it a minute.','Write what you are grateful for in yourself.','Give thanks for a small ordinary thing (food, warmth, sleep).','Reflect: reread the week of gratitude — what shifted in your mood?'],
+   zh:['写下今天你感恩的3件事。','感谢一个人（口头或发消息）。','回想一个教会你东西的困难。','留意身边美好的事物，停留一分钟。','写下你对自己的感恩。','为一件平凡小事感恩（食物、温暖、睡眠）。','总结：重读这周的感恩——你的情绪有何变化？']}},
 ];
 function activeSprints(){const td=todayStr();return (state.sprints||[]).filter(s=>!s.done&&s.end>=td);}
-const SPRINT_COLORS={focus7:'#6366f1',sport14:'#10b981',habit21:'#f59e0b',sleep28:'#8b5cf6'};
-function sprintColor(s){return (s&&s.color)|| SPRINT_COLORS[s&&s.id] ||'#6366f1';}
+const SPRINT_COLORS={};SPRINTS.forEach(s=>{SPRINT_COLORS[s.id]=s.color;});
+function sprintColor(s){const def=SPRINTS.find(x=>x.id===(s&&s.id));return (def&&def.color)||(s&&s.color)||'#6366f1';}
+const MAX_ACTIVE_SPRINTS=2; // осознанный выбор: не больше двух одновременно
+/* Шаг конкретного дня спринта (постепенный вход; после конца массива — закрепление последних шагов) */
+function sprintStep(def,dayIdx,lang){
+ const arr=(def.steps&&def.steps[lang])||(def.steps&&def.steps.ru)||[];
+ if(!arr.length)return '';
+ return dayIdx<arr.length?arr[dayIdx]:arr[arr.length-1];
+}
+/* Отмечен ли день спринта выполненным (осознанно пользователем) */
+function sprintDayDone(s,ds){const d=state.cal&&state.cal[ds];return !!(d&&d.sprintDone&&d.sprintDone[s.id]);}
+function toggleSprintDay(sid,ds){const d=calDay(ds);if(!d.sprintDone)d.sprintDone={};d.sprintDone[sid]=!d.sprintDone[sid];if(d.sprintDone[sid]){addPoints(5);}save();}
 function startSprint(id){
- const def=SPRINTS.find(s=>s.id===id);if(!def)return;
- if((state.sprints||[]).some(s=>s.id===id&&!s.done)){modal('🏃',{ru:'Этот спринт уже идёт.',en:'This sprint is already running.',zh:'这个冲刺已在进行。'}[state.lang||'ru']);return;}
+ const def=SPRINTS.find(s=>s.id===id);if(!def)return;const L=state.lang||'ru';
+ if((state.sprints||[]).some(s=>s.id===id&&!s.done)){modal('🏃',{ru:'Этот спринт уже идёт.',en:'This sprint is already running.',zh:'这个冲刺已在进行。'}[L]);return;}
+ if(activeSprints().length>=MAX_ACTIVE_SPRINTS){modal('🏃',{ru:`Можно вести не больше ${MAX_ACTIVE_SPRINTS} спринтов одновременно. Заверши текущий, чтобы взять новый — так ты доведёшь начатое до конца.`,en:`You can run up to ${MAX_ACTIVE_SPRINTS} sprints at once. Finish a current one to start a new — so you complete what you started.`,zh:`同时最多进行${MAX_ACTIVE_SPRINTS}个冲刺。完成当前的再开始新的——这样你能善始善终。`}[L]);return;}
  const start=todayStr();const end=addDaysStr(start,def.days-1);
  if(!state.sprints)state.sprints=[];
- state.sprints.push({id,type:def.sphere,title:def.title.ru,start,end,days:def.days,done:false,color:SPRINT_COLORS[id]||'#6366f1'});
+ state.sprints.push({id,type:def.sphere,title:def.title.ru,start,end,days:def.days,done:false});
  rememberImportant(`Начал спринт «${def.title.ru}» (${def.days} дней) с ${start}.`);
  save();
- modal(def.emoji+' '+def.title[state.lang||'ru'],def.gain[state.lang||'ru']);
+ modal(def.emoji+' '+def.title[L],def.gain?def.gain[L]:def.why[L]);
  render();
 }
 function sprintProgress(s){
- const td=todayStr();let done=0;
- for(let i=0;i<s.days;i++){const ds=addDaysStr(s.start,i);if(ds>td)break;const d=state.cal&&state.cal[ds];if(d&&(d.tasks>0||d.sleep||d.note))done++;}
+ let done=0;for(let i=0;i<s.days;i++){const ds=addDaysStr(s.start,i);if(sprintDayDone(s,ds))done++;}
  return done;
 }
 function daysBetween(a,b){return Math.round((new Date(b)-new Date(a))/86400000);}
@@ -959,8 +993,8 @@ function generateStarterTasks(scores){
 /* ============================================================
    КАРКАС
    ============================================================ */
-const NAV=['home','tasks','progress','challenges','sleep','chat','activities','courses','settings'];
-const NAV_UNLOCK={progress:'progress',challenges:'challenges',sleep:'sleep',activities:'activities',courses:'courses'};
+const NAV=['home','tasks','progress','chat','activities','courses','settings'];
+const NAV_UNLOCK={progress:'progress',activities:'activities',courses:'courses'};
 function renderNav(){
  const visible=NAV.filter(v=>{const k=NAV_UNLOCK[v];return !k||isUnlocked(k);});
  $('navWrap').innerHTML=visible.map(v=>`<button class="nav-item btn ${state.view===v?'active':'btn-ghost'} text-sm px-4 py-2" onclick="navigate('${v}')">${t('nav_'+v)}</button>`).join('');
@@ -1017,7 +1051,6 @@ function goalCardHtml(){
 function renderHome(){
  const doneTasks=state.archive.length,totalTasks=state.tasks.length+state.archive.length;
  const taskPct=totalTasks?Math.round(doneTasks/totalTasks*100):0;
- const sleepDone=state.sleep.filter(s=>s.done).length,chDone=state.challenges.filter(c=>c.done).length;
  const tc=timeContext();const hour=new Date().getHours();
  const hi=hour<5?t('night'):hour<12?t('morning'):hour<17?t('day'):t('evening');
  $('app').innerHTML=`<div class="fade">
@@ -1031,8 +1064,8 @@ function renderHome(){
   ${journeyHtml()}
   <div class="grid grid-cols-3 gap-3 mb-4">
    ${statCard(t('s_tasks'),doneTasks+' / '+totalTasks,taskPct+t('done_pct'))}
-   ${statCard(t('s_challenges'),chDone+' / '+state.challenges.length,t('done_word'))}
-   ${statCard(t('s_sleep'),sleepDone+' / '+SLEEP_DAYS,t('days_passed'))}</div>
+   ${statCard(({ru:'Спринты',en:'Sprints',zh:'冲刺'})[state.lang||'ru'],String(activeSprints().length),({ru:'активны',en:'active',zh:'进行中'})[state.lang||'ru'])}
+   ${statCard(({ru:'Серия',en:'Streak',zh:'连续'})[state.lang||'ru'],String(state.streak||0),({ru:'дней',en:'days',zh:'天'})[state.lang||'ru'])}</div>
   <div class="card p-6 mb-4"><div class="flex items-center justify-between mb-4"><h2 class="text-lg font-extrabold">${t('taskProgress')}</h2><span class="pill btn-ghost">${taskPct}%</span></div>${donut(taskPct)}</div>
   <div class="card p-6"><h2 class="text-lg font-extrabold mb-3">${t('yourCoach')}</h2>
    <div class="flex items-center gap-4"><div class="text-4xl">${COACHES[state.coach].emoji}</div>
@@ -1183,9 +1216,11 @@ function renderProgress(){
  // спринты
  const act=activeSprints();
  const sprintCards=act.map(s=>{const def=SPRINTS.find(x=>x.id===s.id)||{};const prog=sprintProgress(s);const pct=Math.round(prog/s.days*100);const dayNo=Math.min(s.days,daysBetween(s.start,td)+1);
+  const todayStep=sprintStep(def,dayNo-1,L);const doneToday=sprintDayDone(s,td);
   return `<div class="card p-4 mb-2" style="border-left:4px solid ${sprintColor(s)}"><div class="flex justify-between"><div class="font-extrabold"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${sprintColor(s)};margin-right:6px"></span>${def.emoji||'🏃'} ${(def.title&&def.title[L])||s.title}</div><span class="pill btn-ghost">${({ru:'День',en:'Day',zh:'第'})[L]} ${dayNo}/${s.days}</span></div>
    <div style="height:8px;background:#eef0ff;border-radius:6px;margin:8px 0;overflow:hidden"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#4f46e5,#16b87f)"></div></div>
-   <div class="text-xs" style="color:var(--muted)">💡 ${(def.hold&&def.hold[L])||''}</div></div>`;}).join('');
+   <div class="p-2 rounded-xl mb-2" style="background:${doneToday?'#eaf7f0':'var(--indigo-soft)'}"><div class="text-[11px] font-bold mb-1" style="color:var(--muted)">${({ru:'Задание на сегодня',en:'Today step',zh:'今日任务'})[L]}:</div><div class="text-sm">${esc(todayStep)}</div></div>
+   <button class="btn ${doneToday?'btn-mint':'btn-primary'} w-full py-2 text-sm" onclick="toggleSprintDay('${s.id}','${td}');renderProgress()">${doneToday?('✓ '+({ru:'Выполнено сегодня',en:'Done today',zh:'今日已完成'})[L]):({ru:'Отметить выполнено',en:'Mark done',zh:'标记完成'})[L]}</button></div>`;}).join('');
  const availSprints=SPRINTS.filter(def=>!act.some(s=>s.id===def.id)).map(def=>`<button class="card p-3 text-left" style="border:1px solid var(--line)" onclick="openSprint('${def.id}')"><div class="font-bold text-sm">${def.emoji} ${def.title[L]} <span style="color:var(--muted);font-weight:400">· ${def.days}${({ru:'д',en:'d',zh:'天'})[L]}</span></div></button>`).join('');
 
  // трекер привычек: график по последним 14 реальным дням
@@ -1220,13 +1255,16 @@ function calNav(dir){const [y,m]=state.calMonth.split('-').map(Number);const d=n
 function toggleHabitToday(hid){calToggleHabit(todayStr(),hid);save();renderProgress();}
 function openSprint(id){
  const def=SPRINTS.find(s=>s.id===id);if(!def)return;const L=state.lang||'ru';
+ const preview=(def.steps&&def.steps[L]||[]).slice(0,3).map((st,i)=>`<div class="text-xs" style="color:var(--muted)">${({ru:'День',en:'Day',zh:'第'})[L]} ${i+1}: ${esc(st)}</div>`).join('');
  $('modalTitle').textContent=def.emoji+' '+def.title[L];
  $('modalMsg').innerHTML=`<div class="text-sm" style="text-align:left;line-height:1.6">
   <b>${({ru:'Зачем:',en:'Why:',zh:'为什么：'})[L]}</b> ${esc(def.why[L])}<br><br>
-  <b>${({ru:'Как не сорваться:',en:'How not to quit:',zh:'如何坚持：'})[L]}</b> ${esc(def.hold[L])}<br><br>
-  <b>${({ru:'Что даст:',en:'What you gain:',zh:'你将获得：'})[L]}</b> ${esc(def.gain[L])}</div>
-  <button class="btn btn-primary w-full py-3 mt-4" onclick="startSprint('${id}');closeModal();">${({ru:'Принять спринт',en:'Accept sprint',zh:'接受冲刺'})[L]}</button>`;
- const m=$('modal');m.classList.remove('hidden');const btn=m.querySelector('button:last-child');
+  <b>🔬 ${({ru:'На чём основано:',en:'Based on:',zh:'科学依据：'})[L]}</b> ${esc(def.science[L])}<br><br>
+  <b>${({ru:'Длительность:',en:'Duration:',zh:'时长：'})[L]}</b> ${def.days} ${({ru:'дней — по одному маленькому шагу в день',en:'days — one small step per day',zh:'天——每天一小步'})[L]}<br><br>
+  <b>${({ru:'Первые шаги:',en:'First steps:',zh:'前几步：'})[L]}</b><br>${preview}</div>
+  <div class="text-[11px] mt-3" style="color:var(--muted)">${({ru:`Можно вести не больше ${MAX_ACTIVE_SPRINTS} спринтов сразу — выбирай осознанно и доводи до конца.`,en:`Up to ${MAX_ACTIVE_SPRINTS} sprints at once — choose mindfully and finish.`,zh:`同时最多${MAX_ACTIVE_SPRINTS}个冲刺——慎重选择并完成。`})[L]}</div>
+  <button class="btn btn-primary w-full py-3 mt-3" onclick="startSprint('${id}');closeModal();">${({ru:'Принять спринт',en:'Accept sprint',zh:'接受冲刺'})[L]}</button>`;
+ $('modal').classList.remove('hidden');
 }
 function openCalDay(ds){
  const L=state.lang||'ru';const d=calDay(ds);const td=todayStr();
@@ -1308,20 +1346,24 @@ function generateReport(days,cost){
  addPoints(-cost);reportBusy=true;save();renderNav();closeModal();
  modal('📋',{ru:'Тренер готовит отчёт… Он придёт в Чат и Сообщения. Можешь спокойно пользоваться приложением.',en:'Your coach is preparing the report… It will appear in Chat and Messages. Feel free to keep using the app.',zh:'教练正在准备报告……将出现在聊天和消息中。你可以继续使用应用。'}[L]);
  const summary=buildCalSummary(days>=999?365:days);
- const extra=`Привычки: ${state.habits.map(h=>tr(h.name)).join(', ')||'нет'}. Челленджи завершено: ${state.challenges.filter(c=>c.done).length}/${state.challenges.length}. Активности: свиданий ${state.datesCount||0}, собеседований ${state.interviewsCount||0}, IQ-лучший ${state.iqBest||0}, математика-рекорд ${state.mathBest||0}. Тренировок: ${state.workoutCount||0}. Важные вехи: ${(state.journal||[]).map(j=>j.f).slice(-10).join(' | ')||'нет'}.`;
+ const g=state.bigGoal;
+ const goalInfo=g&&g.active?`Большая цель: «${g.title}» (срок ${g.deadline}). Пройдено этапов: ${g.milestones.filter(m=>m.done).length}/${g.milestones.length}. Ближайший этап: ${(g.milestones.find(m=>!m.done)||{}).title||'—'}.`:'Большая цель не поставлена.';
+ const calInfo=`Дела в календаре: ${deadlineSummary()}.`;
+ const extra=`Привычки: ${state.habits.map(h=>tr(h.name)).join(', ')||'нет'}. Спринты активны: ${activeSprints().map(s=>s.title).join(', ')||'нет'}. ${goalInfo} ${calInfo} Активности: свиданий ${state.datesCount||0}, собеседований ${state.interviewsCount||0}, IQ-лучший ${state.iqBest||0}, математика-рекорд ${state.mathBest||0}. Тренировок: ${state.workoutCount||0}. Важные вехи: ${(state.journal||[]).map(j=>j.f).slice(-10).join(' | ')||'нет'}.`;
  const periodName=(REPORT_OPTS.find(o=>o.days===days)||{n:{ru:''}}).n[L];
  (async()=>{
   try{
-   const sys=buildSystem(COACHES[state.coach])+`\nСЕЙЧАС: составь подробный ОТЧЁТ О ПРОГРЕССЕ (период: ${periodName}). Данные календаря: ${summary}\nДоп. данные: ${extra}\n
-ВАЖНО про стиль: блок «Факты» — строго объективные цифры без эмоций. Остальные блоки — живо, в твоём характере как ${COACHES[state.coach].name}.
-Структура (используй эмодзи-заголовки, разделяй блоки пустой строкой):
-📊 Факты за период: перечисли сухие цифры (активных дней, серии, среднее настроение, сон, привычки, задания).
+   const sys=buildSystem(COACHES[state.coach])+`\nСЕЙЧАС: составь ПОДРОБНЫЙ ОТЧЁТ О ПРОГРЕССЕ (период: ${periodName}). Это платный отчёт — он должен быть глубоким, полезным и стоить своих очков. Данные календаря: ${summary}\nДоп. данные: ${extra}\n
+ОБЯЗАТЕЛЬНО заполни ВСЕ 6 блоков ниже, не сокращай, каждый — несколько предложений. Если есть Большая цель — обязательно оцени продвижение к ней. Учитывай дела в календаре, спринты, привычки, активности.
+Стиль: блок «Факты» — строго объективные цифры без эмоций. Остальные блоки — живо, в твоём характере как ${COACHES[state.coach].name}.
+Структура (используй именно эти эмодзи-заголовки, разделяй блоки пустой строкой):
+📊 Факты за период: сухие цифры (активных дней, серии, настроение, сон, привычки, задания, прогресс к цели).
 💪 Сильные стороны: 2-3 пункта с конкретными примерами из данных.
 🔍 Слепые зоны: честно открой глаза на то, что мешает и чего пользователь сам не видит (паттерны, провалы, противоречия между целями и действиями).
-🌊 Эмоциональный фон: что говорит динамика настроения.
-🎯 План на следующий период: 4-5 конкретных измеримых шагов.
-💬 Личное напутствие: тёплое обращение от тебя лично, чтобы пользователь почувствовал, что ты рядом и веришь в него.
-Пиши развёрнуто и по делу. ОТВЕЧАЙ НА ЯЗЫКЕ: ${aiLang()}.`;
+🌊 Эмоциональный фон: что говорит динамика настроения и заметки.
+🎯 Цель и план: как идёт продвижение к Большой цели (если есть) + 4-5 конкретных измеримых шагов на следующий период.
+💬 Личное напутствие: тёплое личное обращение, чтобы пользователь почувствовал, что ты рядом и веришь в него.
+Пиши развёрнуто, по делу, без воды. ОТВЕЧАЙ НА ЯЗЫКЕ: ${aiLang()}.`;
    const ans=await callGemini(sys,[{role:'user',parts:[{text:'progress report'}]}],false);
    pushMessage(state.coach,'📋 '+({ru:'ОТЧЁТ О ПРОГРЕССЕ',en:'PROGRESS REPORT',zh:'进度报告'})[L]+' ('+periodName+'):\n\n'+ans.reply);
    notify('📋 '+({ru:'Отчёт о прогрессе готов — открой Чат',en:'Progress report is ready — open Chat',zh:'进度报告已就绪——打开聊天'})[L]);
@@ -1358,42 +1400,26 @@ function submitBigGoal(){
  if(!state.apiKey&&!state.proxyUrl){modal(t('aiCoach'),t('aiOff'));return;}
  if(state.points<GOAL_COST){modal(t('notEnough'),t('need')+' '+GOAL_COST+' ✨');return;}
  if(goalBusy)return;goalBusy=true;
- addPoints(-GOAL_COST);save();renderNav();closeModal();
- modal('🎯',({ru:'Тренер строит твою дорожную карту… Это займёт несколько секунд, план придёт в чат на согласование.',en:'Your coach is building your roadmap… It will appear in chat for approval.',zh:'教练正在制定路线图……计划将在聊天中等待你确认。'})[L]);
+ addPoints(-GOAL_COST);
+ // входим в режим обсуждения цели — диалог в чате, утверждение в конце
+ state.goalMode={title,deadline,why,started:todayStr()};
+ state.goalDraft=null;
+ save();renderNav();closeModal();
+ // отправляем «заявку на цель» в чат как сообщение пользователя и зовём тренера
+ state.coach=state.coach||'aurora';
+ state.chat.push({role:'user',text:({ru:`🎯 Хочу поставить цель: «${title}». Срок: ${deadline}.${why?' Зачем мне это: '+why:''}`,en:`🎯 I want to set a goal: "${title}". Deadline: ${deadline}.${why?' Why: '+why:''}`,zh:`🎯 我想设定目标：「${title}」。期限：${deadline}。${why?' 原因：'+why:''}`})[L]});
+ state.view='chat';save();render();
  (async()=>{
   try{
-   const sys=buildSystem(COACHES[state.coach])+`\nСЕЙЧАС: пользователь ставит КРУПНУЮ ЦЕЛЬ: «${title}», срок: «${deadline}». Сегодня ${todayStr()}.
-Сделай так:
-1) Если цель размытая — уточни её по SMART (конкретная, измеримая, реалистичная) прямо в reply одной фразой.
-2) Построй ДОРОЖНУЮ КАРТУ из ВЕХ (этапов), НЕ по дням — крупные ориентиры. Для долгого срока (год) — примерно помесячно (8-12 вех), для короткого — понедельно. Каждая веха: что достичь и к какой дате (вычисли реальные даты от сегодня до срока).
-Верни в reply короткое тёплое вступление + перечисли вехи списком. Заполни поле "goalPlan" объектом: {"title":"итоговая формулировка","deadline":"ГГГГ-ММ-ДД","milestones":[{"title":"...","date":"ГГГГ-ММ-ДД"}]}.
-НЕ заполняй calActions сейчас. ОТВЕЧАЙ НА ЯЗЫКЕ: ${aiLang()}.`;
-   const ans=await callGoalPlan(sys);
-   if(ans&&ans.goalPlan&&Array.isArray(ans.goalPlan.milestones)&&ans.goalPlan.milestones.length){
-    state.goalDraft={title:ans.goalPlan.title||title,deadline:ans.goalPlan.deadline||'',why:why,milestones:ans.goalPlan.milestones,coach:state.coach};
-    save();
-    pushMessage(state.coach,(ans.reply||'')+'\n\n'+({ru:'Открой раздел «Цель», чтобы принять или изменить план.',en:'Open the "Goal" section to approve or edit the plan.',zh:'打开"目标"部分以批准或修改计划。'})[L]);
-    notify('🎯 '+({ru:'План цели готов — нажми «Цель» на Главной',en:'Goal plan is ready — tap "Goal" on Home',zh:'目标计划已就绪——点击主页"目标"'})[L]);
-   }else{
-    addPoints(GOAL_COST);
-    pushMessage(state.coach,({ru:'Не получилось составить план, попробуй переформулировать цель. Очки возвращены.',en:'Could not build the plan, try rephrasing. Points refunded.',zh:'未能制定计划，请重新表述。积分已退还。'})[L]);
+   const ans=await callGemini(buildSystem(COACHES[state.coach]),mainContents());
+   state.chat.push({role:'coach',coach:state.coach,text:ans.reply});
+   if(ans.goalPlan&&Array.isArray(ans.goalPlan.milestones)&&ans.goalPlan.milestones.length){
+    state.goalDraft={title:ans.goalPlan.title||title,deadline:ans.goalPlan.deadline||deadline,why,milestones:ans.goalPlan.milestones,coach:state.coach};
    }
-  }catch(e){addPoints(GOAL_COST);}
+   save();if(state.view==='chat')renderChat();
+  }catch(e){addPoints(GOAL_COST);state.goalMode=null;save();}
   finally{goalBusy=false;save();}
  })();
-}
-/* отдельный вызов с разбором goalPlan */
-async function callGoalPlan(sys){
- if(state.proxyUrl){
-  const res=await fetch(state.proxyUrl.replace(/\/$/,'')+'/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system:sys,contents:[{role:'user',parts:[{text:'build goal plan, return JSON with reply and goalPlan'}]}],wantJson:true})});
-  if(!res.ok)throw new Error('proxy');
-  const d=await res.json();
-  let plan=d.goalPlan||null;
-  if(!plan&&typeof d.reply==='string'){try{const o=JSON.parse(d.reply.replace(/```json|```/g,''));plan=o.goalPlan||null;}catch(_){}}
-  return{reply:cleanReply(d.reply||''),goalPlan:plan};
- }
- const r=await callGeminiDirect(sys,[{role:'user',parts:[{text:'build goal plan'}]}],true);
- return{reply:cleanReply(r.reply||''),goalPlan:r.goalPlan||null};
 }
 function renderGoalStatus(){
  const L=state.lang||'ru';const g=state.bigGoal;
@@ -1429,22 +1455,27 @@ function replaceGoal(){const L=state.lang||'ru';
  if(!state.goalArchive)state.goalArchive=[];
  if(state.bigGoal)state.goalArchive.push({...state.bigGoal,archivedAt:todayStr()});
  state.bigGoal=null;save();closeModal();openBigGoal();}
-function toggleMilestone(i){const g=state.bigGoal;if(!g)return;g.milestones[i].done=!g.milestones[i].done;save();renderGoalStatus();}
+function toggleMilestone(i){const g=state.bigGoal;if(!g)return;const m=g.milestones[i];m.done=!m.done;
+ // синхронизируем связанное дело в календаре
+ if(m.id)Object.keys(state.cal||{}).forEach(ds=>{(state.cal[ds].items||[]).forEach(it=>{if(it.goalMid===m.id)it.done=m.done;});});
+ save();renderGoalStatus();}
 function dismissCalHint(){state.hintCalShown=true;save();renderChat();}
 function dropGoal(){if(!confirm('OK?'))return;state.bigGoal=null;save();closeModal();render();}
 /* согласование плана: принять черновик → вехи в календарь как события */
 function approveGoalPlan(){
  const d=state.goalDraft;if(!d)return;const L=state.lang||'ru';
- state.bigGoal={title:d.title,deadline:d.deadline,why:d.why||'',milestones:d.milestones.map(m=>({...m,done:false})),active:true,started:todayStr(),coach:d.coach};
- // вехи → в календарь как отметки
- d.milestones.forEach(m=>{if(m.date)addCalItem(m.date,'🎯 '+m.title,'',true);});
+ const milestones=d.milestones.map(m=>({...m,id:m.id||uid(),done:false}));
+ state.bigGoal={title:d.title,deadline:d.deadline,why:d.why||'',milestones,active:true,started:todayStr(),coach:d.coach};
+ // вехи → в календарь, связаны общим goalMid (синхронизация выполнения)
+ milestones.forEach(m=>{if(m.date){const it=addCalItem(m.date,'🎯 '+m.title,'',true);it.goalMid=m.id;}});
+ save();
  rememberImportant(`Поставил крупную цель: ${d.title} (срок ${d.deadline}).`);
- state.goalDraft=null;save();closeModal();
- pushMessage(d.coach||state.coach,({ru:'Цель принята! Вехи добавил в календарь. Идём шаг за шагом — я рядом. 🎯',en:'Goal accepted! Milestones are in your calendar. Step by step — I\'m with you. 🎯',zh:'目标已确认！阶段已加入日历。一步步来，我陪着你。🎯'})[L]);
+ state.goalDraft=null;state.goalMode=null;save();closeModal();
+ pushMessage(d.coach||state.coach,({ru:'Цель принята! Вехи добавил в календарь — отмечай их там или в окне цели, прогресс синхронизируется. Идём шаг за шагом, я рядом. 🎯',en:'Goal accepted! Milestones are in your calendar — check them there or in the goal window, progress syncs. Step by step, I\'m with you. 🎯',zh:'目标已确认！阶段已加入日历——在那里或目标窗口中标记，进度会同步。一步步来，我陪着你。🎯'})[L]);
  notify('🎯 '+({ru:'Цель активна — вехи в календаре',en:'Goal active — milestones in calendar',zh:'目标已激活——阶段在日历中'})[L]);
  render();
 }
-function rejectGoalPlan(){state.goalDraft=null;save();renderChat();}
+function rejectGoalPlan(){if(state.goalMode||state.goalDraft){addPoints(GOAL_COST);} state.goalDraft=null;state.goalMode=null;save();renderChat();notify(({ru:'Постановка цели отменена, очки возвращены.',en:'Goal setup cancelled, points refunded.',zh:'目标设定已取消，积分已退还。'})[state.lang||'ru']);}
 function maybeWeeklyReport(){
  if(!state.apiKey&&!state.proxyUrl)return;
  const td=todayStr();
@@ -1513,7 +1544,7 @@ function renderChat(){
    else if(k==='steel'&&!isUnlocked('steelfeat')){locked=true;lockMsg={ru:'Откроется после 40 заданий',en:'Unlocks after 40 tasks',zh:'完成40个任务后解锁'}[state.lang||'ru'];}
    else if(k==='steel'&&!state.unlocked.steel){locked=true;lockMsg={ru:'Разблокируй Стила в Настройках',en:'Unlock Steel in Settings',zh:'在设置中解锁 Steel'}[state.lang||'ru'];}
    return`<button onclick="${locked?`modal('🔒','${lockMsg}')`:`switchCoach('${k}')`}" class="btn text-sm px-3 py-2 ${state.coach===k?'btn-primary':'btn-ghost'}" ${locked?'style="opacity:.55"':''}>${co.emoji} ${co.name}${locked?' 🔒':''}</button>`;}).join('');
- $('app').innerHTML=`<div class="fade"><div class="card p-4 mb-3" style="background:${c.color}18;border-color:${c.color}55"><div class="font-extrabold" style="color:${c.color}">${c.emoji} ${t('unifiedChat')} ${c.name}</div><div class="text-sm" style="color:var(--muted)">${t('chatSub')}</div></div>${!state.hintCalShown?`<div class="card p-3 mb-3" style="background:var(--indigo-soft);border:none"><div class="text-xs" style="color:var(--ink)">💡 ${({ru:'Попроси «добавь…», «поставь…», «напомни…» — дело появится в Календаре (раздел «Прогресс»). Задания-советы от тренера попадают в «Задачи».',en:'Ask "add…", "schedule…", "remind…" — it appears in the Calendar (Progress tab). Coach suggestions go to "Tasks".',zh:'说"添加…""安排…""提醒…"——会出现在日历（进度页）。教练建议的任务进入"任务"。'})[state.lang||'ru']}</div><button class="btn btn-ghost text-xs px-3 py-1 mt-2" onclick="dismissCalHint()">${({ru:'Понятно',en:'Got it',zh:'明白'})[state.lang||'ru']}</button></div>`:''}<div class="scroll-x mb-3"><div class="flex gap-2">${switcher}</div></div><div class="card p-4"><div id="chatbox" class="chatbox" style="height:46vh;min-height:300px;overflow-y:auto;padding-right:4px">${msgs}</div><div id="typing" class="${aiPending?'':'hidden'} text-sm px-2 mt-1" style="color:var(--muted)">${c.name} ${t('typing')} <span class="dots"><span></span><span></span><span></span></span></div><div id="photoPreview" class="${pendingPhoto?'':'hidden'}" style="margin-top:8px">${pendingPhoto?`<div class="flex items-center gap-2 p-2 rounded-xl" style="background:var(--indigo-soft)"><img src="${pendingPhoto}" style="width:44px;height:44px;object-fit:cover;border-radius:8px"><span class="text-sm flex-1">${({ru:'Фото прикреплено',en:'Photo attached',zh:'已附照片'})[state.lang||'ru']}</span><button class="btn btn-ghost px-2 py-1 text-sm" onclick="clearPhoto()">✕</button></div>`:''}</div>${state.goalDraft?`<div class="p-3 rounded-xl mt-2" style="background:#eef0ff;border:1px solid #c7ccf5"><div class="text-sm mb-1">🎯 <b>${esc(state.goalDraft.title)}</b> — ${esc(state.goalDraft.deadline||'')}</div><div class="text-xs mb-2" style="color:var(--muted)">${(state.goalDraft.milestones||[]).slice(0,12).map(m=>`• ${esc(m.title)} (${esc(m.date||'')})`).join('<br>')}</div><div class="flex gap-2"><button class="btn btn-mint px-4 py-2 text-sm" onclick="approveGoalPlan()">${({ru:'Принять план',en:'Accept plan',zh:'接受计划'})[state.lang||'ru']}</button><button class="btn btn-ghost px-4 py-2 text-sm" onclick="rejectGoalPlan()">${({ru:'Отмена',en:'Cancel',zh:'取消'})[state.lang||'ru']}</button></div></div>`:''}${state.pendingCal?`<div class="p-3 rounded-xl mt-2" style="background:#fff7e6;border:1px solid #f3d98a"><div class="text-sm mb-2">📌 ${({ru:'Добавить в календарь',en:'Add to calendar',zh:'添加到日历'})[state.lang||'ru']}:<br>${(state.pendingCal.items||[state.pendingCal]).map(it=>`• <b>${esc(it.title||'')}</b>${it.date?' — '+esc(it.date):''}${it.time?' '+esc(it.time):''}`).join('<br>')}</div><div class="flex gap-2"><button class="btn btn-mint px-4 py-2 text-sm" onclick="confirmCalProposal()">${({ru:'Да',en:'Yes',zh:'好'})[state.lang||'ru']}</button><button class="btn btn-ghost px-4 py-2 text-sm" onclick="declineCalProposal()">${({ru:'Не надо',en:'No',zh:'不用'})[state.lang||'ru']}</button></div></div>`:''}<div class="flex gap-2 mt-3" style="align-items:center"><input id="chatInput" class="flex-1 px-4 py-3 rounded-xl text-sm" style="border:1px solid var(--line);min-width:0" placeholder="${pendingPhoto?({ru:'Добавь подпись к фото…',en:'Add a caption…',zh:'添加说明…'})[state.lang||'ru']:t('writeTo')+' '+c.name+'...'}" onkeydown="if(event.key==='Enter')sendChat()"><button class="btn btn-ghost" style="padding:10px 12px;flex:none" title="${({ru:'Прикрепить фото',en:'Attach photo',zh:'附加照片'})[state.lang||'ru']}" onclick="document.getElementById('photoInput').click()">📎</button><input id="photoInput" type="file" accept="image/*" style="display:none" onchange="attachPhoto(event)">${state.allowImages?`<button class="btn btn-ghost" style="padding:10px 12px;flex:none" title="${t('genImg')}" onclick="askImage()">🖼</button>`:''}<button class="btn btn-primary" style="padding:10px 16px;flex:none" onclick="sendChat()">➤</button></div></div></div>`;
+ $('app').innerHTML=`<div class="fade"><div class="card p-4 mb-3" style="background:${c.color}18;border-color:${c.color}55"><div class="font-extrabold" style="color:${c.color}">${c.emoji} ${t('unifiedChat')} ${c.name}</div><div class="text-sm" style="color:var(--muted)">${t('chatSub')}</div></div>${!state.hintCalShown?`<div class="card p-3 mb-3" style="background:var(--indigo-soft);border:none"><div class="text-xs" style="color:var(--ink)">💡 ${({ru:'Попроси «добавь…», «поставь…», «напомни…» — дело появится в Календаре (раздел «Прогресс»). Задания-советы от тренера попадают в «Задачи».',en:'Ask "add…", "schedule…", "remind…" — it appears in the Calendar (Progress tab). Coach suggestions go to "Tasks".',zh:'说"添加…""安排…""提醒…"——会出现在日历（进度页）。教练建议的任务进入"任务"。'})[state.lang||'ru']}</div><button class="btn btn-ghost text-xs px-3 py-1 mt-2" onclick="dismissCalHint()">${({ru:'Понятно',en:'Got it',zh:'明白'})[state.lang||'ru']}</button></div>`:''}<div class="scroll-x mb-3"><div class="flex gap-2">${switcher}</div></div><div class="card p-4"><div id="chatbox" class="chatbox" style="height:46vh;min-height:300px;overflow-y:auto;padding-right:4px">${msgs}</div><div id="typing" class="${aiPending?'':'hidden'} text-sm px-2 mt-1" style="color:var(--muted)">${c.name} ${t('typing')} <span class="dots"><span></span><span></span><span></span></span></div><div id="photoPreview" class="${pendingPhoto?'':'hidden'}" style="margin-top:8px">${pendingPhoto?`<div class="flex items-center gap-2 p-2 rounded-xl" style="background:var(--indigo-soft)"><img src="${pendingPhoto}" style="width:44px;height:44px;object-fit:cover;border-radius:8px"><span class="text-sm flex-1">${({ru:'Фото прикреплено',en:'Photo attached',zh:'已附照片'})[state.lang||'ru']}</span><button class="btn btn-ghost px-2 py-1 text-sm" onclick="clearPhoto()">✕</button></div>`:''}</div>${state.goalDraft?`<div class="p-3 rounded-xl mt-2" style="background:#eef0ff;border:1px solid #c7ccf5"><div class="text-sm mb-1">🎯 <b>${esc(state.goalDraft.title)}</b> — ${esc(state.goalDraft.deadline||'')}</div><div class="text-xs mb-2" style="color:var(--muted)">${(state.goalDraft.milestones||[]).slice(0,12).map(m=>`• ${esc(m.title)} (${esc(m.date||'')})`).join('<br>')}</div><div class="text-[11px] mb-2" style="color:var(--muted)">${({ru:'Доволен планом? Утверди — вехи лягут в календарь. Или продолжи обсуждение в чате.',en:'Happy with the plan? Approve — milestones go to the calendar. Or keep discussing in chat.',zh:'对计划满意吗？确认——阶段将加入日历。或在聊天中继续讨论。'})[state.lang||'ru']}</div><div class="flex gap-2"><button class="btn btn-mint px-4 py-2 text-sm" onclick="approveGoalPlan()">${({ru:'Утвердить цель',en:'Approve goal',zh:'确认目标'})[state.lang||'ru']}</button><button class="btn btn-ghost px-4 py-2 text-sm" onclick="rejectGoalPlan()">${({ru:'Отменить',en:'Cancel',zh:'取消'})[state.lang||'ru']}</button></div></div>`:(state.goalMode?`<div class="p-3 rounded-xl mt-2" style="background:#eef0ff;border:1px solid #c7ccf5"><div class="text-xs mb-2" style="color:var(--muted)">🎯 ${({ru:'Обсуждаешь цель с тренером. Когда план будет готов — появится кнопка «Утвердить».',en:'Discussing your goal with the coach. When the plan is ready, an "Approve" button appears.',zh:'正在与教练讨论目标。计划就绪后将出现"确认"按钮。'})[state.lang||'ru']}</div><button class="btn btn-ghost px-4 py-2 text-sm" onclick="rejectGoalPlan()">${({ru:'Отменить постановку',en:'Cancel goal setup',zh:'取消设定'})[state.lang||'ru']}</button></div>`:'')}${state.pendingCal?`<div class="p-3 rounded-xl mt-2" style="background:#fff7e6;border:1px solid #f3d98a"><div class="text-sm mb-2">📌 ${({ru:'Добавить в календарь',en:'Add to calendar',zh:'添加到日历'})[state.lang||'ru']}:<br>${(state.pendingCal.items||[state.pendingCal]).map(it=>`• <b>${esc(it.title||'')}</b>${it.date?' — '+esc(it.date):''}${it.time?' '+esc(it.time):''}`).join('<br>')}</div><div class="flex gap-2"><button class="btn btn-mint px-4 py-2 text-sm" onclick="confirmCalProposal()">${({ru:'Да',en:'Yes',zh:'好'})[state.lang||'ru']}</button><button class="btn btn-ghost px-4 py-2 text-sm" onclick="declineCalProposal()">${({ru:'Не надо',en:'No',zh:'不用'})[state.lang||'ru']}</button></div></div>`:''}<div class="flex gap-2 mt-3" style="align-items:center"><input id="chatInput" class="flex-1 px-4 py-3 rounded-xl text-sm" style="border:1px solid var(--line);min-width:0" placeholder="${pendingPhoto?({ru:'Добавь подпись к фото…',en:'Add a caption…',zh:'添加说明…'})[state.lang||'ru']:t('writeTo')+' '+c.name+'...'}" onkeydown="if(event.key==='Enter')sendChat()"><button class="btn btn-ghost" style="padding:10px 12px;flex:none" title="${({ru:'Прикрепить фото',en:'Attach photo',zh:'附加照片'})[state.lang||'ru']}" onclick="document.getElementById('photoInput').click()">📎</button><input id="photoInput" type="file" accept="image/*" style="display:none" onchange="attachPhoto(event)">${state.allowImages?`<button class="btn btn-ghost" style="padding:10px 12px;flex:none" title="${t('genImg')}" onclick="askImage()">🖼</button>`:''}<button class="btn btn-primary" style="padding:10px 16px;flex:none" onclick="sendChat()">➤</button></div></div></div>`;
  const cb=$('chatbox');if(cb)cb.scrollTop=cb.scrollHeight;
 }
 function switchCoach(k){state.coach=k;const last=[...state.chat].reverse().find(m=>m.role==='coach');if(!last||last.coach!==k)state.chat.push({role:'coach',coach:k,text:greeting(k)});save();renderChat();renderNav();}
@@ -1556,6 +1587,9 @@ async function sendChat(){
    ans=await callGemini(buildSystem(COACHES[coachAtSend]),mainContents());
   }
   state.chat.push({role:'coach',coach:coachAtSend,text:ans.reply});
+  if(state.goalMode&&ans.goalPlan&&Array.isArray(ans.goalPlan.milestones)&&ans.goalPlan.milestones.length){
+   state.goalDraft={title:ans.goalPlan.title||state.goalMode.title,deadline:ans.goalPlan.deadline||state.goalMode.deadline,why:state.goalMode.why,milestones:ans.goalPlan.milestones,coach:coachAtSend};
+  }
   if(!state.bond)state.bond={};state.bond[coachAtSend]=(state.bond[coachAtSend]||0)+1; // скрытый рост близости
   if(ans.important&&ans.important.trim())rememberImportant(ans.important.trim());
   if(Array.isArray(ans.calActions)&&ans.calActions.length){
@@ -1685,6 +1719,14 @@ function bondGuidance(c){
 function buildSystem(c){
  return `${c.persona}
 ${bondGuidance(c)}
+${state.goalMode?`\nРЕЖИМ ПОСТАНОВКИ ЦЕЛИ (сейчас активен). Пользователь ставит цель: «${state.goalMode.title}», срок «${state.goalMode.deadline}», зачем: «${state.goalMode.why||'не указано'}». Сегодня ${todayStr()}.
+Твоя задача — как профессиональный наставник провести ОБСУЖДЕНИЕ перед утверждением:
+- БЕЗОПАСНОСТЬ: если цель опасная/деструктивная/незаконная/вредит здоровью — НЕ строй план, мягко откажи и предложи здоровую альтернативу, "goalPlan": null.
+- Если цель размытая — помоги сформулировать по SMART.
+- Если важна стартовая точка (бег, вес, навык) — спроси текущий уровень пользователя (точку А), прежде чем финализировать план.
+- Обсуждай и дорабатывай план в диалоге: задавай уточняющие вопросы, реагируй на правки пользователя, объясняй через что он пройдёт и сколько времени уделять.
+- Когда у тебя есть актуальная версия плана — заполняй "goalPlan": {"title":"...","deadline":"ГГГГ-ММ-ДД","milestones":[{"title":"конкретный измеримый результат","date":"ГГГГ-ММ-ДД"}]}. Прогресс ПЛАВНЫЙ, без скачков, ~8-12 вех для долгого срока. Обновляй goalPlan каждый раз, когда меняешь план по просьбе пользователя.
+- В reply скажи, что когда пользователь будет доволен планом — пусть нажмёт «Утвердить цель».`:''}
 КОНТЕКСТ:
 - Пользователь: ${state.profile.name||'?'}, возраст ${state.profile.age||'?'}, пол ${state.profile.gender||'?'}.
 - О себе: ${state.profile.situation||'—'}
@@ -1696,7 +1738,9 @@ ${bondGuidance(c)}
 - Настроение сегодня (1=плохо,5=отлично): ${state.mood&&state.mood.date===todayStr()?state.mood.val:'не указано'}. Если настроение низкое — будь бережнее.
 - Намерение дня пользователя: ${state.intention&&state.intention.date===todayStr()?state.intention.text:'не задано'}.
 - Выполнено задач всего: ${state.completedCount}.
+${(function(){if(!state.habits||!state.habits.length)return '';const td=todayStr();const info=state.habits.map(h=>{let last=-1;for(let i=0;i<30;i++){const ds=addDaysStr(td,-i);const d=state.cal&&state.cal[ds];if(d&&d.habits&&d.habits[h.id]){last=i;break;}}const status=last===0?'отмечена сегодня':last>0?`последний раз ${last} дн. назад`:'давно не отмечалась';return `${tr(h.name)} (${status})`;}).join('; ');return `\n- ПРИВЫЧКИ пользователя (дневной трекер): ${info}. Поддерживай его в них, напоминай о пользе и зачем они нужны, мягко замечай заброшенные и помогай вернуться. Если привычка вредная/деструктивная — не поддерживай её, тактично укажи на вред и предложи здоровую замену.`;})()}
 - ДЕДЛАЙНЫ И СОБЫТИЯ пользователя (можешь отвечать на вопросы о них, советовать, помогать планировать): ${deadlineSummary()}
+${state.bigGoal&&state.bigGoal.active?`- БОЛЬШАЯ ЦЕЛЬ пользователя: «${state.bigGoal.title}» (срок ${state.bigGoal.deadline}). Этапы: ${state.bigGoal.milestones.map(m=>(m.done?'✓ ':'○ ')+m.title+(m.date?' ('+m.date+')':'')).join('; ')}. Пройдено ${state.bigGoal.milestones.filter(m=>m.done).length}/${state.bigGoal.milestones.length}. Ты ведёшь пользователя к этой цели: отслеживай прогресс, поддерживай, при просьбе помогай скорректировать этапы (через calActions меняй связанные дела), давай задачи, ведущие к ближайшему этапу.`:''}
 
 ФУНКЦИИ ПРИЛОЖЕНИЯ (знай их, чтобы при сложностях подсказать пользователю, КУДА нажать):
 • «Главная» — обзор дня, путь развития, сундук-награда.
@@ -1746,12 +1790,20 @@ function mainContents(){
 function cleanReply(s){
  if(typeof s!=='string')return '';
  let txt=s.trim();
+ // 1) если это похоже на JSON — достаём reply
  if(txt.startsWith('{')||txt.startsWith('```')){
   const m=txt.replace(/```json|```/g,'').match(/"reply"\s*:\s*"((?:[^"\\]|\\.)*)"/);
   if(m&&m[1]){ try{txt=JSON.parse('"'+m[1]+'"');}catch(_){txt=m[1];} }
   else{ try{const o=JSON.parse(txt.replace(/```json|```/g,''));if(o&&typeof o.reply==='string')txt=o.reply;}catch(_){} }
  }
- return txt;
+ // 2) отрезаем технические хвосты, которые модель иногда клеит к человеческому тексту
+ //    (newTasks/calActions/calAction/important/goalPlan: ... до конца строки)
+ txt=txt.replace(/[\s,;]*"?(newTasks|calActions|calAction|important|goalPlan)"?\s*:\s*[\[{][\s\S]*$/i,'');
+ txt=txt.replace(/[\s,;]*"?(newTasks|calActions|calAction|important|goalPlan)"?\s*:\s*("[^"]*"|null|\[\])\s*[,}]*\s*$/i,'');
+ // 3) убираем служебное описание фото и закрывающие скобки/кавычки в хвосте
+ txt=txt.replace(/\[ОПИСАНИЕ:[\s\S]*?\]/gi,'');
+ txt=txt.replace(/[\s]*[}\]]+[\s"']*$/,'');
+ return txt.trim();
 }
 async function callGemini(systemText,contents,wantJson=true){
  if(state.proxyUrl)return callProxy(systemText,contents,wantJson);
@@ -1762,7 +1814,7 @@ async function callProxy(systemText,contents,wantJson){
  if(!res.ok)throw new Error('proxy HTTP '+res.status);
  const d=await res.json();
  let acts=Array.isArray(d.calActions)?d.calActions:(d.calAction?[d.calAction]:[]);
- return{reply:cleanReply(typeof d.reply==='string'?d.reply:JSON.stringify(d)),newTasks:Array.isArray(d.newTasks)?d.newTasks:[],important:typeof d.important==='string'?d.important:'',calActions:acts};
+ return{reply:cleanReply(typeof d.reply==='string'?d.reply:JSON.stringify(d)),newTasks:Array.isArray(d.newTasks)?d.newTasks:[],important:typeof d.important==='string'?d.important:'',calActions:acts,goalPlan:d.goalPlan||null};
 }
 async function callGeminiDirect(systemText,contents,wantJson=true){
  const body={system_instruction:{parts:[{text:systemText}]},contents,generationConfig:{temperature:0.9}};
@@ -2469,9 +2521,15 @@ function morningMotivation(){
  if(state.lastMorningImg===td)return;
  if(!state.apiKey&&!state.proxyUrl)return;
  state.lastMorningImg=td;save();
+ // напоминание о шагах активных спринтов на сегодня
+ const L=state.lang||'ru';
+ const sprintNudges=activeSprints().map(s=>{const def=SPRINTS.find(x=>x.id===s.id)||{};const dayNo=Math.min(s.days,daysBetween(s.start,td)+1);const step=sprintStep(def,dayNo-1,L);return `${def.emoji||'🏃'} ${(def.title&&def.title[L])||s.title} — ${({ru:'день',en:'day',zh:'第'})[L]} ${dayNo}: ${step}`;});
+ if(sprintNudges.length){
+  notify('🏃 '+({ru:'Задания спринтов на сегодня готовы — загляни в «Прогресс»',en:'Today\'s sprint steps are ready — open Progress',zh:'今日冲刺任务已就绪——打开进度'})[L]);
+ }
  (async()=>{
   try{
-   const sys=buildSystem(COACHES[state.coach])+`\nСЕЙЧАС: доброе утро. Напиши короткую тёплую мотивацию на день (2-3 предложения) в своём стиле, без новых задач. ОТВЕЧАЙ НА ЯЗЫКЕ: ${aiLang()}.`;
+   const sys=buildSystem(COACHES[state.coach])+`\nСЕЙЧАС: доброе утро. Напиши короткую тёплую мотивацию на день (2-3 предложения) в своём стиле.${sprintNudges.length?' У пользователя сегодня есть шаги спринтов: '+sprintNudges.join(' | ')+'. Мягко напомни про них и подбодри сделать сегодняшний шаг.':' Без новых задач.'} ОТВЕЧАЙ НА ЯЗЫКЕ: ${aiLang()}.`;
    const ans=await callGemini(sys,[{role:'user',parts:[{text:'morning'}]}],false);
    state.chat.push({role:'coach',coach:state.coach,text:'☀️ '+(ans.reply||'Доброе утро!')});
    save();if(state.view==='chat')renderChat();
@@ -2486,7 +2544,7 @@ load();
 loadVideos();
 if(state.onboarded){touchStreak();checkUnlocks();morningMotivation();maybeWeeklyReport();}
 render();
-Object.assign(window,{navigate,closeModal,testNext,pickAnswer,finishTest,completeTask,toggleHabit,addHabit,removeHabit,advanceChallenge,completeSleep,sendChat,switchCoach,askImage,selectCoachSetting,saveApiKey,saveProxy,toggleImages,unlockRock,retakeTest,hardReset,startDate,finishDate,startIQ,answerIQ,startInterview,finishInterview,actSend,claimChest,setMood,saveIntention,startWorkout,workoutNext,workoutSkip,setLang,startGratitude,startVisualize,finishSession,startMeditation,speakMsg,stopSpeak,beginWorkout,wkStartTimer,wkStopTimer,beginMeditation,medPlay,medStop,medFinish,confirmTask,unlockSteel,attachPhoto,clearPhoto,startMath,mathAns,devUnlockAll,devCheck,calNav,toggleHabitToday,openSprint,startSprint,openCalDay,setCalMood,saveCalDay,openReportPicker,generateReport,clearNotifs,renderCourses,buyArticle,openArticle,readArticle,stopCoursesAudio,confirmCalProposal,declineCalProposal,toggleCalItem,editCalItemPrompt,addCalItemPrompt,deleteCalItem,openBigGoal,submitBigGoal,renderGoalStatus,toggleMilestone,dropGoal,approveGoalPlan,rejectGoalPlan,dismissCalHint,addMilestonePrompt,replaceGoal,openNotifs,openExtraCourse});
+Object.assign(window,{navigate,closeModal,testNext,pickAnswer,finishTest,completeTask,toggleHabit,addHabit,removeHabit,advanceChallenge,completeSleep,sendChat,switchCoach,askImage,selectCoachSetting,saveApiKey,saveProxy,toggleImages,unlockRock,retakeTest,hardReset,startDate,finishDate,startIQ,answerIQ,startInterview,finishInterview,actSend,claimChest,setMood,saveIntention,startWorkout,workoutNext,workoutSkip,setLang,startGratitude,startVisualize,finishSession,startMeditation,speakMsg,stopSpeak,beginWorkout,wkStartTimer,wkStopTimer,beginMeditation,medPlay,medStop,medFinish,confirmTask,unlockSteel,attachPhoto,clearPhoto,startMath,mathAns,devUnlockAll,devCheck,calNav,toggleHabitToday,openSprint,startSprint,openCalDay,setCalMood,saveCalDay,openReportPicker,generateReport,clearNotifs,renderCourses,buyArticle,openArticle,readArticle,stopCoursesAudio,confirmCalProposal,declineCalProposal,toggleCalItem,editCalItemPrompt,addCalItemPrompt,deleteCalItem,openBigGoal,submitBigGoal,renderGoalStatus,toggleMilestone,dropGoal,approveGoalPlan,rejectGoalPlan,dismissCalHint,addMilestonePrompt,replaceGoal,openNotifs,openExtraCourse,toggleSprintDay});
 </script>
 </body>
 </html>
