@@ -1,0 +1,33 @@
+{
+  "_comment": "КУРСЫ: видео, pdf, аудио. Каждый курс — объект в массиве courses. Цена в очках (price). type: video | pdf | audio. url — ссылка на файл. Меняй значения в кавычках, не трогай структуру. Последний курс — без запятой после }.",
+
+  "courses": [
+    {
+      "id": "course1",
+      "type": "video",
+      "price": 80,
+      "emoji": "🎬",
+      "title": { "ru": "Название курса", "en": "Course title", "zh": "课程标题" },
+      "sub":   { "ru": "Краткое описание", "en": "Short description", "zh": "简短描述" },
+      "url": ""
+    },
+    {
+      "id": "course2",
+      "type": "pdf",
+      "price": 60,
+      "emoji": "📄",
+      "title": { "ru": "Чек-лист (PDF)", "en": "Checklist (PDF)", "zh": "清单 (PDF)" },
+      "sub":   { "ru": "Что внутри", "en": "What's inside", "zh": "内容简介" },
+      "url": ""
+    },
+    {
+      "id": "course3",
+      "type": "audio",
+      "price": 50,
+      "emoji": "🎧",
+      "title": { "ru": "Аудио-курс", "en": "Audio course", "zh": "音频课程" },
+      "sub":   { "ru": "О чём", "en": "About", "zh": "关于" },
+      "url": ""
+    }
+  ]
+}
