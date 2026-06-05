@@ -50,6 +50,7 @@
     <div class="flex items-center justify-between py-3">
       <div class="display font-extrabold text-2xl" style="color:var(--indigo)">Motivation</div>
       <div class="flex items-center gap-3">
+        <button id="helpBtn" onclick="openHelp()" style="background:#fff;border:1px solid var(--line);border-radius:50%;width:38px;height:38px;cursor:pointer;font-size:16px" title="Помощь">❓</button>
         <button id="bellBtn" onclick="openNotifs()" style="position:relative;background:#fff;border:1px solid var(--line);border-radius:50%;width:38px;height:38px;cursor:pointer;font-size:17px">🔔<span id="bellDot" class="hidden" style="position:absolute;top:-4px;right:-4px;background:var(--coral);color:#fff;border-radius:10px;min-width:18px;height:18px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px"></span></button>
         <div class="pill" style="background:#fff;border:1px solid var(--line)"><span id="coachBadge">💖 Аврора</span></div>
         <div class="pill btn-ghost flex items-center gap-1">✨ <b id="pointsBadge">0</b></div>
@@ -915,8 +916,8 @@ function rememberImportant(fact){
  if(state.journal.length>40)state.journal=state.journal.slice(-40);
 }
 /* Добавить сообщение тренера в чат (с фоновой перерисовкой, если открыт чат) */
-function pushMessage(coach,text){
- state.chat.push({role:'coach',coach:coach||state.coach,text:cleanReply(text)});
+function pushMessage(coach,text,raw){
+ state.chat.push({role:'coach',coach:coach||state.coach,text:raw?text:cleanReply(text)});
  save();
  if(state.view==='chat')renderChat();
 }
@@ -1000,6 +1001,26 @@ function finishTest(){
  personalizeStarterTasks();
 }
 /* Приветственная подсказка: для чего приложение и как растёт путь */
+/* Подробный гид по функциям — показывает только то, что уже открыто, чтобы не путать */
+function openHelp(){
+ const L=state.lang||'ru';
+ const tips=[
+  {key:'tasks',  always:true,  icon:'📋', t:{ru:['Задачи','Выполняй задания — за каждое даёшь себе очки ✨. Тренер подбирает их под тебя. Свайпом/кнопкой отмечай выполненные.'],en:['Tasks','Complete tasks — each earns points ✨. Your coach tailors them to you. Mark done with the button.'],zh:['任务','完成任务——每个赚取积分✨。教练为你定制。用按钮标记完成。']}},
+  {key:'chat',   always:true,  icon:'💬', t:{ru:['Чат с тренером','Пиши тренеру о чём угодно. Он помнит тебя. Скажи «добавь…», «поставь встречу…», «напомни…» — и дело появится в Календаре. Можешь прикрепить фото 📎 (тренер оценит еду, тренировку).'],en:['Coach chat','Talk to your coach about anything. They remember you. Say "add…", "schedule…", "remind…" — it goes to the Calendar. Attach a photo 📎 (coach reviews food, workouts).'],zh:['教练聊天','和教练聊任何事。他记得你。说"添加…""安排…""提醒…"——进入日历。可附照片📎（教练评估饮食、训练）。']}},
+  {key:'progress',unlock:'progress',icon:'📅',t:{ru:['Календарь','Нажми на день — добавляй дела с временем, отмечай настроение, пиши заметки. Внизу — спринты и трекер привычек. 📌 дела, ⏰ просрочено, 🌙 сон, цветные полоски — спринты.'],en:['Calendar','Tap a day — add timed plans, set mood, write notes. Below: sprints and habit tracker. 📌 plans, ⏰ overdue, 🌙 sleep, colored bars — sprints.'],zh:['日历','点击某天——添加带时间的计划、记录心情、写笔记。下方：冲刺和习惯追踪。📌计划，⏰逾期，🌙睡眠，彩色条——冲刺。']}},
+  {key:'sprints',unlock:'progress',icon:'🏃',t:{ru:['Спринты','Научные мини-программы (сон, движение, фокус…). Каждый день — конкретный шаг с пояснением, зачем он. Отмечай день — копится цепочка 🔥, не разрывай её! Максимум 2 спринта сразу — выбирай осознанно.'],en:['Sprints','Science-based mini-programs (sleep, movement, focus…). Each day a concrete step with why. Mark the day — a chain builds 🔥, keep it going! Max 2 at once — choose mindfully.'],zh:['冲刺','基于科学的小程序（睡眠、运动、专注…）。每天一个具体步骤并说明原因。标记当天——形成连续🔥，别中断！最多同时2个——慎重选择。']}},
+  {key:'goal',   always:true,  icon:'🎯', t:{ru:['Большая цель','На Главной поставь большую цель (за очки). Тренер обсудит её с тобой, построит план по этапам, и они лягут в Календарь. Отмечай этапы — прогресс виден. При достижении — поздравления от всех тренеров.'],en:['Big goal','On Home set a big goal (costs points). Your coach discusses it, builds a milestone plan into the Calendar. Mark milestones — progress shows. On completion — congrats from all coaches.'],zh:['大目标','在主页设定大目标（消耗积分）。教练与你讨论，制定阶段计划并加入日历。标记阶段——显示进度。完成时——所有教练祝贺。']}},
+  {key:'activities',unlock:'activities',icon:'🎮',t:{ru:['Активности','Свидания, медитации, тренировки, IQ, собеседования, математика. Здесь же — твои достижения за значимый прогресс.'],en:['Activities','Dates, meditations, workouts, IQ, interviews, math. Also: your achievements for meaningful progress.'],zh:['活动','约会、冥想、训练、智力、面试、数学。还有：你的重要进度成就。']}},
+  {key:'courses',unlock:'courses',icon:'📚',t:{ru:['Курсы','Проверенные статьи и курсы за очки. Можно слушать (озвучка).'],en:['Courses','Verified articles and courses for points. Listen with audio.'],zh:['课程','用积分解锁的可靠文章和课程。可语音收听。']}},
+  {key:'bell',   always:true,  icon:'🔔', t:{ru:['Колокольчик','Вверху справа — все уведомления: напоминания, итоги недели, отчёты. Ничего не теряется.'],en:['Bell','Top right — all notifications: reminders, weekly summaries, reports. Nothing gets lost.'],zh:['铃铛','右上角——所有通知：提醒、每周总结、报告。不会丢失。']}},
+  {key:'reports',unlock:'progress',icon:'📋',t:{ru:['Отчёты','В Календаре кнопка «Отчёт о прогрессе» — тренер делает глубокий разбор твоего пути: факты, сильные стороны, слепые зоны, план.'],en:['Reports','In Calendar tap "Progress report" — a deep review of your journey: facts, strengths, blind spots, plan.'],zh:['报告','在日历点击"进度报告"——深入分析你的历程：事实、优势、盲点、计划。']}},
+ ];
+ const visible=tips.filter(x=>x.always||(x.unlock&&isUnlocked(x.unlock))||(x.key==='sprints'&&isUnlocked('progress')));
+ const html=visible.map(x=>`<div class="p-3 rounded-xl mb-2" style="background:var(--indigo-soft);text-align:left"><div class="font-bold text-sm">${x.icon} ${x.t[L][0]}</div><div class="text-xs mt-1" style="color:var(--muted)">${x.t[L][1]}</div></div>`).join('');
+ $('modalTitle').textContent='❓ '+({ru:'Как пользоваться',en:'How to use',zh:'使用指南'})[L];
+ $('modalMsg').innerHTML=`<div style="max-height:60vh;overflow-y:auto">${html}</div>`;
+ $('modal').classList.remove('hidden');
+}
 function welcomeHint(){
  const L=state.lang||'ru';
  const txt={
@@ -1055,7 +1076,7 @@ function render(){
   if(activeRender){activeRender();return;}
   else{state.view='activities';} // сессия потеряна (перезагрузка) — вернёмся к списку
  }
- ({home:renderHome,tasks:renderTasks,progress:renderProgress,challenges:renderChallenges,sleep:renderSleep,chat:renderChat,activities:renderActivities,courses:renderCourses,settings:renderSettings}[state.view]||renderHome)();
+ ({home:renderHome,tasks:renderTasks,progress:renderProgress,chat:renderChat,activities:renderActivities,courses:renderCourses,settings:renderSettings}[state.view]||renderHome)();
  // если есть незавершённая активность — показать баннер возврата
  if(activeRender&&state.view!=='activity'){
   const app=$('app');if(app){const b=document.createElement('div');b.className='card p-3 fade';b.style.cssText='position:sticky;bottom:8px;margin-top:12px;background:var(--indigo);color:#fff;cursor:pointer;text-align:center;font-weight:700';b.textContent=({ru:'↩ Вернуться к активности',en:'↩ Resume activity',zh:'↩ 返回当前活动'})[state.lang||'ru'];b.onclick=()=>{state.view='activity';render();};app.appendChild(b);}
@@ -1411,7 +1432,7 @@ function generateReport(days,cost){
 💬 Личное напутствие: тёплое личное обращение, чтобы пользователь почувствовал, что ты рядом и веришь в него.
 Пиши развёрнуто, по делу, без воды. ОТВЕЧАЙ НА ЯЗЫКЕ: ${aiLang()}.`;
    const ans=await callGemini(sys,[{role:'user',parts:[{text:'progress report'}]}],false);
-   pushMessage(state.coach,'📋 '+({ru:'ОТЧЁТ О ПРОГРЕССЕ',en:'PROGRESS REPORT',zh:'进度报告'})[L]+' ('+periodName+'):\n\n'+ans.reply);
+   pushMessage(state.coach,'📋 '+({ru:'ОТЧЁТ О ПРОГРЕССЕ',en:'PROGRESS REPORT',zh:'进度报告'})[L]+' ('+periodName+'):\n\n'+ans.reply,true);
    notify('📋 '+({ru:'Отчёт о прогрессе готов — открой Чат',en:'Progress report is ready — open Chat',zh:'进度报告已就绪——打开聊天'})[L]);
   }catch(e){ pushMessage(state.coach,'⚠ '+({ru:'Не удалось составить отчёт, попробуй позже. Очки возвращены.',en:'Could not generate the report, try later. Points refunded.',zh:'报告生成失败，请稍后再试。积分已退还。'})[L]); addPoints(cost); }
   finally{ reportBusy=false; save(); }
@@ -2661,7 +2682,7 @@ load();
 loadVideos();
 if(state.onboarded){touchStreak();checkUnlocks();morningMotivation();maybeWeeklyReport();}
 render();
-Object.assign(window,{navigate,closeModal,testNext,pickAnswer,finishTest,completeTask,toggleHabit,addHabit,removeHabit,advanceChallenge,completeSleep,sendChat,switchCoach,askImage,selectCoachSetting,saveApiKey,saveProxy,toggleImages,unlockRock,retakeTest,hardReset,startDate,finishDate,startIQ,answerIQ,startInterview,finishInterview,actSend,claimChest,setMood,saveIntention,startWorkout,workoutNext,workoutSkip,setLang,startGratitude,startVisualize,finishSession,startMeditation,speakMsg,stopSpeak,beginWorkout,wkStartTimer,wkStopTimer,beginMeditation,medPlay,medStop,medFinish,confirmTask,unlockSteel,attachPhoto,clearPhoto,startMath,mathAns,devUnlockAll,devCheck,calNav,toggleHabitToday,openSprint,startSprint,openCalDay,setCalMood,saveCalDay,openReportPicker,generateReport,clearNotifs,renderCourses,buyArticle,openArticle,readArticle,stopCoursesAudio,confirmCalProposal,declineCalProposal,toggleCalItem,editCalItemPrompt,addCalItemPrompt,deleteCalItem,openBigGoal,submitBigGoal,renderGoalStatus,toggleMilestone,dropGoal,approveGoalPlan,rejectGoalPlan,dismissCalHint,addMilestonePrompt,replaceGoal,openNotifs,openExtraCourse,toggleSprintDay,finishGoal});
+Object.assign(window,{navigate,closeModal,testNext,pickAnswer,finishTest,completeTask,toggleHabit,addHabit,removeHabit,advanceChallenge,completeSleep,sendChat,switchCoach,askImage,selectCoachSetting,saveApiKey,saveProxy,toggleImages,unlockRock,retakeTest,hardReset,startDate,finishDate,startIQ,answerIQ,startInterview,finishInterview,actSend,claimChest,setMood,saveIntention,startWorkout,workoutNext,workoutSkip,setLang,startGratitude,startVisualize,finishSession,startMeditation,speakMsg,stopSpeak,beginWorkout,wkStartTimer,wkStopTimer,beginMeditation,medPlay,medStop,medFinish,confirmTask,unlockSteel,attachPhoto,clearPhoto,startMath,mathAns,devUnlockAll,devCheck,calNav,toggleHabitToday,openSprint,startSprint,openCalDay,setCalMood,saveCalDay,openReportPicker,generateReport,clearNotifs,renderCourses,buyArticle,openArticle,readArticle,stopCoursesAudio,confirmCalProposal,declineCalProposal,toggleCalItem,editCalItemPrompt,addCalItemPrompt,deleteCalItem,openBigGoal,submitBigGoal,renderGoalStatus,toggleMilestone,dropGoal,approveGoalPlan,rejectGoalPlan,dismissCalHint,addMilestonePrompt,replaceGoal,openNotifs,openExtraCourse,toggleSprintDay,finishGoal,openHelp});
 </script>
 </body>
 </html>
