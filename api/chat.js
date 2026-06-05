@@ -23,7 +23,7 @@ module.exports = async (req, res) => {
     const r = await fetch(BASE_URL.replace(/\/$/, '') + '/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + KEY },
-      body: JSON.stringify({ model: MODEL, messages, temperature: 0.9 })
+      body: JSON.stringify({ model: MODEL, messages, temperature: 0.9, max_tokens: 2000 })
     });
     const data = await r.json();
     if (data.error) return res.status(200).json({ reply: 'Ошибка ИИ: ' + (data.error.message || JSON.stringify(data.error)), newTasks: [] });
