@@ -76,6 +76,7 @@
    ============================================================ */
 const STORE_KEY='motivationAppState_v2';
 const HABIT_DAYS=21, SLEEP_DAYS=28, ROCK_PRICE=190;
+const APP_VERSION='v9.7 · отчёты+спринты+помощь';
 const COST_DATE=120, COST_IQ=50, COST_INTERVIEW=80, COST_WORKOUT=60, COST_IMG=30;
 const GEMINI_TEXT='gemini-2.5-flash';     // не используется при работе через прокси (модель задаётся на сервере)
 const GEMINI_IMG='gemini-2.5-flash-image';// не используется при работе через прокси
@@ -1420,18 +1421,33 @@ function generateReport(days,cost){
  const periodName=(REPORT_OPTS.find(o=>o.days===days)||{n:{ru:''}}).n[L];
  (async()=>{
   try{
-   const sys=buildSystem(COACHES[state.coach])+`\nСЕЙЧАС: составь ПОДРОБНЫЙ ОТЧЁТ О ПРОГРЕССЕ (период: ${periodName}). Это платный отчёт — он должен быть глубоким, полезным и стоить своих очков. Данные календаря: ${summary}\nДоп. данные: ${extra}\n
-ОБЯЗАТЕЛЬНО заполни ВСЕ 6 блоков ниже, не сокращай, каждый — несколько предложений. Если есть Большая цель — обязательно оцени продвижение к ней. Учитывай дела в календаре, спринты, привычки, активности.
-Стиль: блок «Факты» — строго объективные цифры без эмоций. Остальные блоки — живо, в твоём характере как ${COACHES[state.coach].name}.
-Структура (используй именно эти эмодзи-заголовки, разделяй блоки пустой строкой):
-📊 Факты за период: сухие цифры (активных дней, серии, настроение, сон, привычки, задания, прогресс к цели).
-💪 Сильные стороны: 2-3 пункта с конкретными примерами из данных.
-🔍 Слепые зоны: честно открой глаза на то, что мешает и чего пользователь сам не видит (паттерны, провалы, противоречия между целями и действиями).
-🌊 Эмоциональный фон: что говорит динамика настроения и заметки.
-🎯 Цель и план: как идёт продвижение к Большой цели (если есть) + 4-5 конкретных измеримых шагов на следующий период.
-💬 Личное напутствие: тёплое личное обращение, чтобы пользователь почувствовал, что ты рядом и веришь в него.
-Пиши развёрнуто, по делу, без воды. ОТВЕЧАЙ НА ЯЗЫКЕ: ${aiLang()}.`;
-   const ans=await callGemini(sys,[{role:'user',parts:[{text:'progress report'}]}],false);
+   const c=COACHES[state.coach];
+   const sys=`${c.persona}\nТы — наставник ${c.name}. Профиль пользователя: ${state.profile.name||'?'}, ${state.profile.age||'?'} лет. О себе: ${state.profile.situation||'—'}. Заметки/вехи: ${(state.journal||[]).map(j=>j.f).slice(-8).join('; ')||'нет'}.\n
+ЗАДАЧА: составь ПОДРОБНЫЙ платный ОТЧЁТ О ПРОГРЕССЕ за период «${periodName}». Это важный момент подведения итогов — отчёт должен быть глубоким и полезным.
+ДАННЫЕ ЗА ПЕРИОД: ${summary}
+ДОП. ДАННЫЕ: ${extra}
+Напиши развёрнутый отчёт из ШЕСТИ блоков. Каждый блок — отдельный, начинается с эмодзи-заголовка, между блоками пустая строка. НЕ останавливайся после вступления — выдай все 6 блоков целиком:
+
+📊 Факты за период
+(только объективные цифры: активные дни, серия, настроение, сон, привычки, задания, прогресс к цели — без эмоций)
+
+💪 Сильные стороны
+(2-3 пункта с конкретными примерами из данных)
+
+🔍 Слепые зоны
+(честно: что мешает и чего пользователь сам не замечает — паттерны, провалы, противоречия)
+
+🌊 Эмоциональный фон
+(что говорит динамика настроения и заметки)
+
+🎯 Цель и план
+(продвижение к большой цели, если есть; затем 4-5 конкретных измеримых шагов на следующий период)
+
+💬 Личное напутствие
+(тёплое личное обращение в твоём стиле как ${c.name}, чтобы пользователь почувствовал поддержку)
+
+Пиши в своём характере (кроме блока Фактов). Это ОБЫЧНЫЙ ТЕКСТ, без JSON и без markdown-заголовков #. ОТВЕЧАЙ НА ЯЗЫКЕ: ${aiLang()}.`;
+   const ans=await callGemini(sys,[{role:'user',parts:[{text:({ru:'Составь полный отчёт о моём прогрессе, все 6 блоков.',en:'Write my full progress report, all 6 blocks.',zh:'写出我的完整进度报告，全部6个部分。'})[L]}]}],false);
    pushMessage(state.coach,'📋 '+({ru:'ОТЧЁТ О ПРОГРЕССЕ',en:'PROGRESS REPORT',zh:'进度报告'})[L]+' ('+periodName+'):\n\n'+ans.reply,true);
    notify('📋 '+({ru:'Отчёт о прогрессе готов — открой Чат',en:'Progress report is ready — open Chat',zh:'进度报告已就绪——打开聊天'})[L]);
   }catch(e){ pushMessage(state.coach,'⚠ '+({ru:'Не удалось составить отчёт, попробуй позже. Очки возвращены.',en:'Could not generate the report, try later. Points refunded.',zh:'报告生成失败，请稍后再试。积分已退还。'})[L]); addPoints(cost); }
@@ -2591,7 +2607,9 @@ function renderSettings(){
   <div class="card p-5"><h2 class="font-extrabold mb-1">🛠 ${({ru:'Режим разработчика',en:'Developer mode',zh:'开发者模式'})[state.lang||'ru']}</h2>${state.devMode
     ? `<p class="text-sm mb-3" style="color:var(--muted)">${({ru:'Открыть все разделы, тренеров и +500 очков.',en:'Unlock all sections, coaches and +500 points.',zh:'解锁所有板块、教练并+500积分。'})[state.lang||'ru']}</p><button class="btn btn-primary px-4 py-3 text-sm" onclick="devUnlockAll()">${({ru:'Открыть всё',en:'Unlock all',zh:'全部解锁'})[state.lang||'ru']}</button>`
     : `<p class="text-sm mb-3" style="color:var(--muted)">${({ru:'Введи код доступа.',en:'Enter access code.',zh:'输入访问码。'})[state.lang||'ru']}</p><div class="flex gap-2"><input id="devCode" type="password" class="flex-1 px-4 py-3 rounded-xl text-sm" style="border:1px solid var(--line)" placeholder="••••••"><button class="btn btn-ghost px-4" onclick="devCheck()">OK</button></div>`}</div>
-  <div class="card p-5"><h2 class="font-extrabold mb-1" style="color:var(--coral)">${t('resetT')}</h2><p class="text-sm mb-3" style="color:var(--muted)">${t('resetSub')}</p><button class="btn px-4 py-3 text-sm" style="background:#ffeceb;color:var(--coral)" onclick="hardReset()">${t('delAll')}</button></div></div>`;
+  <div class="card p-5"><h2 class="font-extrabold mb-1" style="color:var(--coral)">${t('resetT')}</h2><p class="text-sm mb-3" style="color:var(--muted)">${t('resetSub')}</p><button class="btn px-4 py-3 text-sm" style="background:#ffeceb;color:var(--coral)" onclick="hardReset()">${t('delAll')}</button></div>
+  <button class="btn btn-ghost w-full py-3" onclick="openHelp()">❓ ${({ru:'Как пользоваться приложением',en:'How to use the app',zh:'如何使用应用'})[state.lang||'ru']}</button>
+  <div class="text-center text-xs" style="color:var(--muted)">${APP_VERSION}</div></div>`;
 }
 function selectCoachSetting(k){state.coach=k;save();renderSettings();renderNav();}
 function saveApiKey(){state.apiKey=$('apiKeyInput').value.trim();save();renderSettings();}
