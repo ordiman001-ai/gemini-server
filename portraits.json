@@ -1,0 +1,4 @@
+{
+ "aurora": { "neutral": "https://.../aurora.png", "happy": "https://.../aurora-happy.png" },
+ "johnny": { "neutral": "https://.../johnny.png" }
+}
